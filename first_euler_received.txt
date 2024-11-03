@@ -1,0 +1,4 @@
+Euler Angles:
+Roll (x): 47.30822
+Pitch (y): 0.5658684
+Yaw (z): 39.89981

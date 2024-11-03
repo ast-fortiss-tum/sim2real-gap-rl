@@ -66,6 +66,7 @@
   <exec_depend>sensor_msgs</exec_depend>
   <build_depend>cv_bridge</build_depend>
   <exec_depend>cv_bridge</exec_depend>
+  <depend>opencv-python</depend> 
 
 
   <!-- The export tag contains other, unspecified, tags -->
