@@ -1,6 +1,6 @@
 # Off-Dynamics Reinforcement Learning via Domain Adaptation and Reward Augmented Imitation
 
-This repository provides python implementation for our paper [Off-Dynamics Reinforcement Learning via Domain Adaptation and Reward Augmented Imitation]() to appear in Neurips 2024.
+This repository provides python implementation for our paper [Off-Dynamics Reinforcement Learning via Domain Adaptation and Reward Augmented Imitation](https://arxiv.org/abs/2411.09891) to appear in Neurips 2024.
 
 ### Abstract
 Training a policy in a source domain for deployment in the target domain under a dynamics shift can be challenging, often resulting in performance degradation. 
