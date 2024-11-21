@@ -19,12 +19,12 @@ We conducted experiments on four mujoco environments: HalfCheetah, Ant, Walker2d
 #### DARC training
 First, we train Darc.
 ```console
-$ python train_darc.py --env HalfCheetah --save_file_name 
+$ python train_darc.py --env HalfCheetah --save_file_name HalfCheetah --broken 1 --break_src 1
 ```
 
 After we obtain the Darc policy, we do the imitation learning. 
 ```console
-$ python imitation_learning.py --env HalfCheetah --reward_type 2  
+$ python imitation_learning.py --env HalfCheetah --reward_type 2  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
 ```
 
 
