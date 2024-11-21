@@ -17,7 +17,14 @@ without imitation learning and also outperforms other baselines in benchmark off
 We conducted experiments on four mujoco environments: HalfCheetah, Ant, Walker2d, and Reacher. Also, we experiment on two types of dynamics shift, one is the broken environment and the other one is modifying the gravity/density of the target domain.
 
 #### DARC training
-First, we train darc.
+First, we train Darc.
 ```console
-# python train_darc.py --env HalfCheetah --save_file_name 
+$ python train_darc.py --env HalfCheetah --save_file_name 
 ```
+
+After we obtain the Darc policy, we do the imitation learning. 
+```console
+$ python imitation_learning.py --env HalfCheetah --reward_type 2  
+```
+
+
