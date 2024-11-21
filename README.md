@@ -12,4 +12,10 @@ Domain Adaptation and Reward Augmented Imitation Learning (DARAIL), utilizes the
 adversarial imitation learning from observation (GAIfO) by applying a reward augmented estimator for the policy optimization step. Theoretically, we present an error bound 
 for our method under a mild assumption regarding the dynamics shift to justify the motivation of our method. Empirically, our method outperforms the pure modified reward method 
 without imitation learning and also outperforms other baselines in benchmark off-dynamics environments.
+
 ### Experiments
+We conducted experiments on four mujoco environments: HalfCheetah, Ant, Walker2d, and Reacher. Also, we experiment on two types of dynamics shift, one is the broken environment and the other one is modifying the gravity/density of the target domain.
+
+#### DARC training
+First, we train darc.
+```console
