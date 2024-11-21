@@ -19,5 +19,5 @@ We conducted experiments on four mujoco environments: HalfCheetah, Ant, Walker2d
 #### DARC training
 First, we train darc.
 ```console
-# python train_darc.py --env HalfCheetah
+# python train_darc.py --env HalfCheetah --save_file_name 
 ```
