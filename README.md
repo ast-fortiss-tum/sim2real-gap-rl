@@ -29,3 +29,12 @@ $ python imitation_learning.py --env HalfCheetah --reward_type 2  --save_model H
 ```
 To run experiments on other broken settings, you can change the parameter. For broken target setting, you can set --broken 1 --break_src 0. For changing the gravity and density setting, use the following command: --variety-name g/d --degree  0.5/1.5.
 
+To run IPS-ACL or IPS-R: 
+```console
+$ python imitation_learning.py --env HalfCheetah --reward_type 3/13  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
+```
+
+To run DAIL:
+```console
+$ python imitation_learning.py --env HalfCheetah --reward_type 1  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
+```
