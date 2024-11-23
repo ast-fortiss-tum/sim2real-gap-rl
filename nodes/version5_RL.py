@@ -9,7 +9,12 @@ import uuid
 from gym_donkeycar.envs.donkey_env import DonkeyEnv
 from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback   
+from stable_baselines3.common.policies import ActorCriticPolicy 
+
+from stable_baselines3.sac.policies import SACPolicy
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+
 import cv2
 import torch
 import torch.nn as nn
@@ -80,6 +85,7 @@ class CustomDonkeyEnv(DonkeyEnv):
     def step(self, action):
         observation, reward, done, info = super().step([action[0], 0.5])  # Constant throttle
         obs = preprocess_image(observation)
+        #obs = observation
 
         """
         info = {
@@ -125,13 +131,14 @@ class CustomDonkeyEnv(DonkeyEnv):
         
         # Further encourage staying close to center
         if abs(cte) < max_cte*0.2:
-            reward += 5  # Bonus for staying very close to center
+            reward += 1  # Bonus for staying very close to center
 
         return obs, reward, done, info
 
     def reset(self):
         observation = super().reset()
         return preprocess_image(observation)
+        #return observation
 
 # Custom feature extractor based on NVIDIA's CNN structure
 class NvidiaCNNExtractor(BaseFeaturesExtractor):
@@ -145,26 +152,37 @@ class NvidiaCNNExtractor(BaseFeaturesExtractor):
             nn.Conv2d(48, 64, kernel_size=3, stride=1), nn.ReLU(),
             #nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(640, 100), nn.ReLU(),
+            #nn.Linear(640, 100), nn.ReLU(),
             #nn.Linear(100, 50), nn.ReLU(),
             #nn.Linear(50, 10), nn.ReLU(),
-            nn.Linear(100, 10), nn.ReLU(),
-            nn.Linear(10, 1)  # Output is steering only
+            nn.Linear(640, 1),
+            nn.Tanh()
+            #nn.Linear(10, 1)  # Output is steering only
         )
 
     def forward(self, observations):
+        #print(self.cnn(observations).shape)
         return self.cnn(observations)
 
 # Define the environment and the model with the custom CNN
 def make_env():
+    #env = DonkeyEnv(level=env_list[1], conf=env_config)
     env = CustomDonkeyEnv(level=env_list[1], conf=env_config)
     return env
 
-env = DummyVecEnv([make_env])
+env = DummyVecEnv([make_env])       
 
-policy_kwargs = dict(
-    features_extractor_class=NvidiaCNNExtractor,
-)
+class CustomSACPolicy(SACPolicy):
+    def __init__(self, *args, **kwargs):
+        super(CustomSACPolicy, self).__init__(
+            *args,
+            features_extractor_class=NvidiaCNNExtractor,
+            **kwargs
+        )
+
+#policy_kwargs = dict(
+#    features_extractor_class=NvidiaCNNExtractor,
+#)
 
 
 """
@@ -179,11 +197,11 @@ model = SAC(
 """
 
 model = SAC(
-    policy="MlpPolicy",                    # The policy architecture; e.g., 'MlpPolicy' for a multi-layer perceptron policy.
+    policy=CustomSACPolicy,                    # The policy architecture; e.g., 'MlpPolicy' for a multi-layer perceptron policy.
     env=env,                                # The environment object.
-    learning_rate=3e-4,                     # Learning rate for the optimizer (default: 3e-4).
-    buffer_size=100000,                     # Size of the replay buffer (number of experiences stored).
-    learning_starts=100,                    # Minimum steps of interaction before learning starts (default: 100).
+    learning_rate=2e-4,                     # Learning rate for the optimizer (default: 3e-4).
+    buffer_size=60000,                     # Size of the replay buffer (number of experiences stored).
+    learning_starts=1000,                    # Minimum steps of interaction before learning starts (default: 100).
     batch_size=256,                         # Batch size for each gradient update (default: 256).
     tau=0.005,                              # Target smoothing coefficient (soft update) (default: 0.005).
     gamma=0.99,                             # Discount factor for reward (default: 0.99).
@@ -197,9 +215,9 @@ model = SAC(
     use_sde=False,                          # Whether to use State-Dependent Exploration (SDE) (default: False).
     sde_sample_freq=-1,                     # Frequency for sampling a new noise matrix when using SDE.
     use_sde_at_warmup=False,                # Whether to use SDE during warm-up (default: False).
-    policy_kwargs=policy_kwargs,            # Additional arguments for the policy network, e.g., custom feature extractors.
+    #policy_kwargs=policy_kwargs,            # Additional arguments for the policy network, e.g., custom feature extractors.
     verbose=1,                              # Verbosity level; 0: none, 1: info, 2: debug.
-    seed=None,                              # Random seed for reproducibility.
+    seed=100,                              # Random seed for reproducibility.
     device="auto",                          # Device for PyTorch tensors; 'auto', 'cpu', or 'cuda'.
     tensorboard_log="./sac_donkeycar_tensorboard/", # Directory for tensorboard logging.
 
@@ -213,7 +231,7 @@ checkpoint_callback = CheckpointCallback(
 )
 
 # Train the model
-model.learn(total_timesteps=10000, callback=checkpoint_callback)
+model.learn(total_timesteps=80000, callback=checkpoint_callback)
 
 # Save the final model
 model.save("sac_donkeycar")
