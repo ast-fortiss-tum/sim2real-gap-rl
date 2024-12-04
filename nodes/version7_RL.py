@@ -69,7 +69,7 @@ class DonkeyCarConfig:
             "bio": "Learning to drive with SAC",
             "guid": str(uuid.uuid4()),
             "random_seed": random.randint(0, 10000),
-            "max_cte": 6,
+            "max_cte": 0.8,
             "frame_skip": 1,
             "cam_resolution": (240, 320, 4),
             "log_level": 20,
@@ -173,7 +173,7 @@ class CustomDonkeyEnv(DonkeyEnv):
                 - info (dict): Additional information from the environment.
         """
         # Execute the action with a constant throttle of 0.5
-        observation, original_reward, done, info = super().step([action[0], 0.5])
+        observation, original_reward, done, info = super().step([action[0], 0.2])
         
         # Preprocess the image observation
         obs = preprocess_image(observation)
@@ -220,6 +220,7 @@ class CustomDonkeyEnv(DonkeyEnv):
             float: The computed reward.
         """
         # Normalize cross-track error
+        print("CTE: ", cte)
         cte_normalized = cte / self.max_cte
         cte_reward = 1.0 - abs(cte_normalized)
         cte_reward = np.clip(cte_reward, 0.0, 1.0)
@@ -239,9 +240,9 @@ class CustomDonkeyEnv(DonkeyEnv):
         # Aggregate rewards with appropriate weighting
         total_reward = (
             1.0 * cte_reward - 
-            0.5 * steering_penalty + 
-            0.5 * speed_reward + 
-            collision_penalty
+            0.0 * steering_penalty + 
+            0.0 * speed_reward + 
+            0.0 * collision_penalty
         )
         
         return total_reward
@@ -427,37 +428,11 @@ def main():
         features_extractor_class=NvidiaCNNExtractor,
     )
     
-    # Initialize the SAC model
-    model = SAC(
-        policy='CnnPolicy',  # Use 'CnnPolicy' for image-based observations
-        env=env,
-        learning_rate=3e-4,
-        buffer_size=60000,
-        learning_starts=100,
-        batch_size=256,
-        tau=0.005,
-        gamma=0.99,
-        train_freq=1,
-        gradient_steps=1,
-        action_noise=None,
-        optimize_memory_usage=False,
-        ent_coef="auto",
-        target_update_interval=1,
-        target_entropy="auto",
-        use_sde=False,
-        use_sde_at_warmup=False,
-        policy_kwargs=policy_kwargs,
-        verbose=1,  # Set verbosity to see SB3's logging
-        seed=seed,
-        device="auto",
-        tensorboard_log="./sac_donkeycar_tensorboard/",
-    )
-    
     # Initialize callbacks
     average_reward_callback = AverageRewardCallback(verbose=1)
     sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard/", verbose=1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=5000,                              # Save every 5000 steps
+        save_freq=20000,                              # Save every 5000 steps
         save_path='./sac_donkeycar_checkpoints/',    # Directory to save checkpoints
         name_prefix='sac_donkeycar',
         verbose=2                                    # Verbosity level
@@ -465,9 +440,55 @@ def main():
     
     # Combine callbacks into a CallbackList
     callbacks = CallbackList([average_reward_callback, sac_loss_logger, checkpoint_callback])
+
+    # Path to the last checkpoint (replace with your actual path)
+    checkpoint_path = "./sac_donkeycar_checkpoints/sac_donkeycar_800000_steps.zip"
+
+    # Check if a checkpoint exists
+    try:
+        env = VecNormalize.load("vecnormalize_53.pkl", env)
+        # Load the model from the checkpoint
+        model = SAC.load(checkpoint_path, env=env)
+        print(f"Successfully loaded model from checkpoint: {checkpoint_path}")
+        # Access the optimizer and change the learning rate
+        new_learning_rate = 2e-4  # Set your desired learning rate
+        for param_group in model.policy.optimizer.param_groups:
+            param_group['lr'] = new_learning_rate
+
+        print(f"Learning rate updated to {new_learning_rate}")
+
+    except FileNotFoundError:
+
+        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
+        # Initialize the SAC model
+        model = SAC(
+            policy='CnnPolicy',  # Use 'CnnPolicy' for image-based observations
+            env=env,
+            learning_rate=3e-4,
+            buffer_size=300000,
+            learning_starts=1,
+            batch_size=256,
+            tau=0.005,
+            gamma=0.99,
+            train_freq=1,
+            gradient_steps=1,
+            action_noise=None,
+            optimize_memory_usage=False,
+            ent_coef="auto",
+            target_update_interval=1,
+            target_entropy="auto",
+            use_sde=False,
+            use_sde_at_warmup=False,
+            policy_kwargs=policy_kwargs,
+            verbose=1,  # Set verbosity to see SB3's logging
+            seed=seed,
+            device="auto",
+            tensorboard_log="./sac_donkeycar_tensorboard/",
+        )
     
     # Start training
-    total_timesteps = 20000  # Replace with desired number of timesteps
+    total_timesteps = 100000  # Replace with desired number of timesteps
     print("Starting training...")
     model.learn(
         total_timesteps=total_timesteps,
