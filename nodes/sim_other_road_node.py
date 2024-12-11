@@ -67,7 +67,6 @@ class DonkeySimMsgHandler(IMesgHandler):
         
         return rotation_angle_degrees
 
-
     def on_recv_message(self, message):
         # self.timer.on_frame()
         if not 'msg_type' in message:
@@ -91,8 +90,7 @@ class DonkeySimMsgHandler(IMesgHandler):
 
         self.client.queue_message(msg)
         # display waiting screen
-
-    
+ 
     def on_connect(self, client):
         self.client = client
         # self.timer.reset()

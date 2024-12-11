@@ -183,7 +183,7 @@ road_generation = Road_shapes_utils(SCALE_1, SCALE_2, X_MAP_SHIFT, Y_MAP_SHIFT, 
 
 #generate road elements
 if ROAD_TYPE=='Straight_line':
-        road_points=[[0,-1.8],[0,2.6]]
+        road_points=[[0,-1.8],[0,10.6]]
         start_angle=0
         start_offset_real=[0.22,-0.3]
         initial_pose_sim,initial_pose_real,sim_waypoint_list,road_definition=road_generation.create_non_closed_road(road_points,start_angle,start_offset_real)

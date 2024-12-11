@@ -55,10 +55,13 @@ class DonkeyCarConfig:
         "sparkfun_avc",
         "generated_track",
         "roboracingleague_1",
+        #"small_looping_course",
+        "sandbox_track",
     ]
     
     env_config = {
         "exe_path": "/home/cubos98/Desktop/MA/sim/sim_vehicle.x86_64",
+        #"exe_path": "/home/cubos98/Desktop/MA/DonkeySimLinux/donkey_sim.x86_64",
         "host": "127.0.0.1",
         "port": 9091,
         "conf": {
@@ -109,6 +112,8 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
     # Convert RGB to YUV color space
     observation = cv2.cvtColor(observation, cv2.COLOR_RGB2YUV)
 
+    #print("Observation shape: ", observation.shape)
+
     # Resize to (80, 60)
     observation = cv2.resize(observation, (80, 60), interpolation=cv2.INTER_AREA)
 
@@ -117,6 +122,8 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
 
     # Transpose to channel-first format
     observation = np.transpose(observation, (2, 0, 1)).astype(np.float32)
+
+    #print("Observation shape after preprocessing: ", observation.shape)
 
     return observation
 
@@ -148,15 +155,15 @@ class CustomDonkeyEnv(DonkeyEnv):
         
         # Define the action space (steering angle)
         self.action_space = gym.spaces.Box(
-            low=np.array([-1.0]), 
-            high=np.array([1.0]), 
+            low=np.array([-0.5]), 
+            high=np.array([0.5]), 
             dtype=np.float32
         )
         
         # Initialize maximum cross-track error and target speed
         self.max_cte = conf["max_cte"]
         self.max_steering_angle = 1.0  # Assuming steering angle ranges between -1 and 1
-        self.target_speed = 0.5  # Define a target speed for the agent
+        self.target_speed = 0.3  # Define a target speed for the agent
     
     def step(self, action: np.ndarray) -> tuple:
         """
@@ -463,13 +470,13 @@ def main():
         print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
         # Initialize the SAC model
         model = SAC(
-            policy='CnnPolicy',  # Use 'CnnPolicy' for image-based observations
+            policy='MlpPolicy',  # Use 'CnnPolicy' for image-based observations
             env=env,
-            learning_rate=3e-4,
-            buffer_size=300000,
+            learning_rate=7.3e-4,
+            buffer_size=10000,
             learning_starts=1,
             batch_size=256,
-            tau=0.005,
+            tau=0.02,
             gamma=0.99,
             train_freq=1,
             gradient_steps=1,
@@ -477,7 +484,7 @@ def main():
             optimize_memory_usage=False,
             ent_coef="auto",
             target_update_interval=1,
-            target_entropy="auto",
+            target_entropy=-0.5,
             use_sde=False,
             use_sde_at_warmup=False,
             policy_kwargs=policy_kwargs,
@@ -488,7 +495,7 @@ def main():
         )
     
     # Start training
-    total_timesteps = 100000  # Replace with desired number of timesteps
+    total_timesteps = 20000  # Replace with desired number of timesteps
     print("Starting training...")
     model.learn(
         total_timesteps=total_timesteps,
@@ -496,12 +503,12 @@ def main():
     )
     
     # Save the final model
-    model.save("sac_donkeycar_final")
-    print("Model saved as 'sac_donkeycar_final'")
+    model.save("sac_donkeycar3")
+    print("Model saved as 'sac_donkeycar3'")
     
     # Save the VecNormalize statistics for future use
-    env.save("vecnormalize.pkl")
-    print("VecNormalize statistics saved as 'vecnormalize.pkl'")
+    env.save("vecnormalize3.pkl")
+    print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
     
     # Close the environment
     env.close()

@@ -290,7 +290,7 @@ def new_reset(msg):
     global position_tracked
     print("\nRESETTING SCENARIO")
     #read initial road configuration from json file
-    f = open("map.json", "r")
+    f = open("map_straight.json", "r")
     map_data = json.loads(f.read())
     f.close()
     simulator_client.msg_handler.reset_scenario(0,map_data["road_definition"])
@@ -303,7 +303,6 @@ def new_reset(msg):
     print(f"current pose in sim {simulator_client.msg_handler.pos_x,simulator_client.msg_handler.pos_y,simulator_client.msg_handler.pos_z}")
     position_tracked = False
     
-
 
 def new_throttle_steering(msg):
     #TODO: change behaviour if youre braking to stop
@@ -355,7 +354,7 @@ def simulator_node():
 
     #read initial road configuration from json file
     print("\nINITIALIZING SCENARIO")
-    f = open("map.json", "r")
+    f = open("map_straight.json", "r")
     map_data = json.loads(f.read())
     f.close()
     simulator_client.msg_handler.reset_scenario(0,map_data["road_definition"])
@@ -400,7 +399,7 @@ def simulator_node():
     pub_euler_position = None
     pub_image_for_model = None
     pub_sim_obstacles = None
-    rate = rospy.Rate(50)
+    rate = rospy.Rate(1)
 
 
     while not rospy.is_shutdown():

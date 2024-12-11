@@ -25,8 +25,8 @@ class LineFollower:
         rate = rospy.Rate(50)
         
         # Control parameters
-        self.steering_gain = 0.01  # Tuning parameter for steering sensitivity
-        self.speed = 0.1  # Constant speed for throttle control
+        self.steering_gain = 0.004  # Tuning parameter for steering sensitivity
+        self.speed = 0.3  # Constant speed for throttle control
 
     def image_callback(self, msg):
         # Convert the ROS image message to an OpenCV image
