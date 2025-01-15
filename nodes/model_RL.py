@@ -14,7 +14,7 @@ from stable_baselines3 import SAC  # Import the Stable-Baselines3 SAC
 from version7_RL import preprocess_image
 
 # Path to the Stable-Baselines3 SAC model
-MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/nodes/sac_donkeycar_final'
+MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/sac_donkeycar3'
 
 FIXED_THROTTLE = True
 STEERING = 0
@@ -41,7 +41,7 @@ def new_image(msg):
     steering = action[0]
 
     if FIXED_THROTTLE:
-        throttle = 0.2
+        throttle = 0.1
 
     # Publish throttle and steering commands
     if pub_throttle_steering is None:
@@ -58,7 +58,7 @@ def model_node():
     print("Model loaded successfully.")
 
     rospy.init_node("model_node", anonymous=True)
-    rate = rospy.Rate(1)  # Set the desired frequency to 3 Hz
+    rate = rospy.Rate(10)  # Set the desired frequency to 3 Hz
     rospy.Subscriber("/sim/image", SensorImage, new_image)
 
     while not rospy.is_shutdown():

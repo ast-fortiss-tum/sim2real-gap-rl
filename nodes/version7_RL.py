@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!usr/bin/ python3
 """
 Soft Actor-Critic (SAC) Implementation for Line Following in DonkeyCar Environment
 
@@ -58,9 +58,10 @@ class DonkeyCarConfig:
         #"small_looping_course",
         "sandbox_track",
     ]
-    
+
     env_config = {
-        "exe_path": "/home/cubos98/Desktop/MA/sim/sim_vehicle.x86_64",
+        "exe_path": "/home/cubos98/Desktop/MA/sim/sdsim_2/sim_NT.x86_64",
+        #"exe_path": "/home/cubos98/Desktop/MA/sim/sim_vehicle.x86_64",
         #"exe_path": "/home/cubos98/Desktop/MA/DonkeySimLinux/donkey_sim.x86_64",
         "host": "127.0.0.1",
         "port": 9091,
@@ -153,17 +154,24 @@ class CustomDonkeyEnv(DonkeyEnv):
             dtype=np.float32
         )
         
-        # Define the action space (steering angle)
+        # Define the action space (steering angle)  
+        """
         self.action_space = gym.spaces.Box(
-            low=np.array([-0.5]), 
-            high=np.array([0.5]), 
+            low=np.array([-0.5, 0.2]), 
+            high=np.array([0.5, 0.8]), 
+            dtype=np.float32
+        )"""
+
+        self.action_space = gym.spaces.Box(
+            low=np.array([-0.9]), 
+            high=np.array([0.9]), 
             dtype=np.float32
         )
         
         # Initialize maximum cross-track error and target speed
         self.max_cte = conf["max_cte"]
-        self.max_steering_angle = 1.0  # Assuming steering angle ranges between -1 and 1
-        self.target_speed = 0.3  # Define a target speed for the agent
+        self.max_steering_angle = 0.5  # Assuming steering angle ranges between -1 and 1
+        self.target_speed = 0.8  # Define a target speed for the agent
     
     def step(self, action: np.ndarray) -> tuple:
         """
@@ -180,8 +188,8 @@ class CustomDonkeyEnv(DonkeyEnv):
                 - info (dict): Additional information from the environment.
         """
         # Execute the action with a constant throttle of 0.5
-        observation, original_reward, done, info = super().step([action[0], 0.2])
-        
+        #observation, original_reward, done, info = super().step([action[0], action[1]])
+        observation, original_reward, done, info = super().step([action[0], 0.3])
         # Preprocess the image observation
         obs = preprocess_image(observation)
         
@@ -439,7 +447,7 @@ def main():
     average_reward_callback = AverageRewardCallback(verbose=1)
     sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard/", verbose=1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=20000,                              # Save every 5000 steps
+        save_freq=10000,                              # Save every 5000 steps
         save_path='./sac_donkeycar_checkpoints/',    # Directory to save checkpoints
         name_prefix='sac_donkeycar',
         verbose=2                                    # Verbosity level
@@ -449,7 +457,7 @@ def main():
     callbacks = CallbackList([average_reward_callback, sac_loss_logger, checkpoint_callback])
 
     # Path to the last checkpoint (replace with your actual path)
-    checkpoint_path = "./sac_donkeycar_checkpoints/sac_donkeycar_800000_steps.zip"
+    checkpoint_path = "./sac_donkeycar_checkpoints/sac_donkeycar_X_steps.zip"
 
     # Check if a checkpoint exists
     try:
@@ -503,11 +511,11 @@ def main():
     )
     
     # Save the final model
-    model.save("sac_donkeycar3")
+    model.save("sac_donkeycar_new_track")
     print("Model saved as 'sac_donkeycar3'")
     
     # Save the VecNormalize statistics for future use
-    env.save("vecnormalize3.pkl")
+    env.save("vecnormalize_new_track.pkl")
     print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
     
     # Close the environment

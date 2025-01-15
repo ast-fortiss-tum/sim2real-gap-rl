@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import json
 
 import numpy as np
+import os
 
 import cv2
 
@@ -88,8 +89,10 @@ class DonkeySimMsgHandler(IMesgHandler):
             "wayPoints": waypoints.__str__(),
 
         }
-
+        print("HOLAAAAAAAA.    ")
+        print(waypoints)
         self.client.queue_message(msg)
+        
         # display waiting screen
 
     
@@ -288,11 +291,13 @@ def new_obstacles(msg):
 def new_reset(msg):
     global simulator_client
     global position_tracked
-    print("\nRESETTING SCENARIO")
+    print("\nRESETTING SCENARIO AAAAA")
     #read initial road configuration from json file
-    f = open("map_straight.json", "r")
+    f = open("/home/cubos98/catkin_ws/src/Vehicle/road_totest3.json", "r")
     map_data = json.loads(f.read())
     f.close()
+    print("HOLAAAAAAAA.    ")
+    print(map_data["road_definition"])
     simulator_client.msg_handler.reset_scenario(0,map_data["road_definition"])
     #send initial car pose
     initial_pose = map_data["initial_pose_sim"]
@@ -341,9 +346,6 @@ def new_multiplier(msg):
     global throttle_multiplier
     throttle_multiplier = msg.data
 
-
-
-
 def simulator_node():
     print("Starting simulator node")
     global simulator_client
@@ -354,7 +356,7 @@ def simulator_node():
 
     #read initial road configuration from json file
     print("\nINITIALIZING SCENARIO")
-    f = open("map_straight.json", "r")
+    f = open("/home/cubos98/catkin_ws/src/Vehicle/road_totest3.json", "r")
     map_data = json.loads(f.read())
     f.close()
     simulator_client.msg_handler.reset_scenario(0,map_data["road_definition"])
@@ -399,7 +401,7 @@ def simulator_node():
     pub_euler_position = None
     pub_image_for_model = None
     pub_sim_obstacles = None
-    rate = rospy.Rate(1)
+    rate = rospy.Rate(10)
 
 
     while not rospy.is_shutdown():

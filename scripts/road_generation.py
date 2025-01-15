@@ -178,6 +178,8 @@ ROAD_TYPE = 'Guericke'
 #########
 ROAD_TYPE = 'Straight_line'
 
+ROAD_TYPE = 'Circuit'
+
 
 road_generation = Road_shapes_utils(SCALE_1, SCALE_2, X_MAP_SHIFT, Y_MAP_SHIFT, SIZE_FACTOR, ANGLE_SHIFT)
 
@@ -250,7 +252,7 @@ map = {
     "obstacles": obstacles
 }
 
-with open("map_straight.json", "w") as f:
+with open("circuit.json", "w") as f:
     f.write(json.dumps(map))
 
 print(os.getcwd())
