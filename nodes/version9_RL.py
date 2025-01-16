@@ -1,4 +1,4 @@
-#!usr/bin/ python3
+#! /usr/bin/env python3
 """
 Soft Actor-Critic (SAC) Implementation for Line Following in DonkeyCar Environment
 
@@ -19,6 +19,7 @@ import argparse
 import random
 import uuid
 import time
+import os  # <-- Added for setting environment variables
 
 # Third-Party Libraries
 import cv2
@@ -36,6 +37,9 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from torch.utils.tensorboard import SummaryWriter
+
+# For deterministic CuDNN
+import torch.backends.cudnn as cudnn
 
 # Local Modules
 import gym_donkeycar
@@ -68,7 +72,7 @@ class DonkeyCarConfig:
         "start_delay": 5.0,
         "max_cte": 2.0,
         "frame_skip": 1,
-        "cam_resolution": (120, 160, 3), #(240, 320, 4)
+        "cam_resolution": (240, 320, 4), #(240, 320, 4)
         "host": "localhost",
         "port": 9091,
         "steer_limit": 1.0,
@@ -84,7 +88,7 @@ class DonkeyCarConfig:
             "random_seed": random.randint(0, 10000),
             "max_cte": 0.8,
             "frame_skip": 1,
-            "cam_resolution": (240, 320, 4),
+            #"cam_resolution": (240, 320, 4),
         }
     }
     
@@ -104,12 +108,6 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
     3. Resizes the image to (80, 60).
     4. Normalizes pixel values to [0, 1].
     5. Transposes the image to channel-first format for PyTorch.
-
-    Args:
-        observation (np.ndarray): The raw image observation from the environment.
-
-    Returns:
-        np.ndarray: The preprocessed image.
     """
     # Convert RGBA to RGB if necessary
     if observation.shape[2] == 4:
@@ -117,8 +115,6 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
 
     # Convert RGB to YUV color space
     observation = cv2.cvtColor(observation, cv2.COLOR_RGB2YUV)
-
-    #print("Observation shape: ", observation.shape)
 
     # Resize to (80, 60)
     observation = cv2.resize(observation, (80, 60), interpolation=cv2.INTER_AREA)
@@ -128,8 +124,6 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
 
     # Transpose to channel-first format
     observation = np.transpose(observation, (2, 0, 1)).astype(np.float32)
-
-    #print("Observation shape after preprocessing: ", observation.shape)
 
     return observation
 
@@ -144,10 +138,6 @@ class CustomDonkeyEnv(DonkeyEnv):
     def __init__(self, level: str, conf: dict):
         """
         Initializes the custom environment.
-
-        Args:
-            level (str): The environment level name.
-            conf (dict): Configuration dictionary for the environment.
         """
         super(CustomDonkeyEnv, self).__init__(level=level, conf=conf)
         
@@ -159,14 +149,7 @@ class CustomDonkeyEnv(DonkeyEnv):
             dtype=np.float32
         )
         
-        # Define the action space (steering angle)  
-        """
-        self.action_space = gym.spaces.Box(
-            low=np.array([-0.5, 0.2]), 
-            high=np.array([0.5, 0.8]), 
-            dtype=np.float32
-        )"""
-
+        # Define the action space (steering angle only)
         self.action_space = gym.spaces.Box(
             low=np.array([-0.9]), 
             high=np.array([0.9]), 
@@ -175,31 +158,21 @@ class CustomDonkeyEnv(DonkeyEnv):
         
         # Initialize maximum cross-track error and target speed
         self.max_cte = conf["max_cte"]
-        self.max_steering_angle = 0.5  # Assuming steering angle ranges between -1 and 1
-        self.target_speed = 0.8  # Define a target speed for the agent
+        self.max_steering_angle = 0.5  # Steering angle range assumed to be [-1, 1]
+        self.target_speed = 0.8
     
     def step(self, action: np.ndarray) -> tuple:
         """
         Executes a step in the environment with the given action.
-
-        Args:
-            action (np.ndarray): The steering action taken by the agent.
-
-        Returns:
-            tuple: A tuple containing:
-                - obs (np.ndarray): The preprocessed observation.
-                - reward (float): The computed reward.
-                - done (bool): Flag indicating if the episode has ended.
-                - info (dict): Additional information from the environment.
         """
-        # Execute the action with a constant throttle of 0.5
-        #observation, original_reward, done, info = super().step([action[0], action[1]])
+        # Execute the action with a constant throttle of 0.3
         observation, original_reward, done, info = super().step([action[0], 0.3])
+        
         # Preprocess the image observation
         obs = preprocess_image(observation)
         
         # Extract relevant information for reward calculation
-        cte = info.get('cte', 0.0)  # Cross-track error
+        cte = info.get('cte', 0.0)      # Cross-track error
         speed = info.get('speed', 0.0)  # Current speed
         collision = info.get('hit', False)  # Collision flag
         
@@ -211,9 +184,6 @@ class CustomDonkeyEnv(DonkeyEnv):
     def reset(self) -> np.ndarray:
         """
         Resets the environment and returns the initial observation.
-
-        Returns:
-            np.ndarray: The preprocessed initial observation.
         """
         observation = super().reset()
         return preprocess_image(observation)
@@ -228,28 +198,17 @@ class CustomDonkeyEnv(DonkeyEnv):
     ) -> float:
         """
         Computes the reward based on cross-track error, steering, speed, and collision status.
-
-        Args:
-            cte (float): Cross-track error.
-            steering_angle (float): Current steering angle.
-            speed (float): Current speed of the agent.
-            collision (bool): Collision status.
-            done (bool): Flag indicating if the episode has ended.
-
-        Returns:
-            float: The computed reward.
         """
         # Normalize cross-track error
-        print("CTE: ", cte)
         cte_normalized = cte / self.max_cte
         cte_reward = 1.0 - abs(cte_normalized)
         cte_reward = np.clip(cte_reward, 0.0, 1.0)
         
-        # Steering penalty to encourage smooth driving
+        # Steering penalty (optional or can be used if desired)
         steering_penalty = abs(steering_angle) / self.max_steering_angle
         steering_penalty = np.clip(steering_penalty, 0.0, 1.0)
         
-        # Speed reward to encourage maintaining target speed
+        # Speed reward (optional or can be used if desired)
         speed_error = abs(speed - self.target_speed) / self.target_speed
         speed_reward = 1.0 - speed_error
         speed_reward = np.clip(speed_reward, 0.0, 1.0)
@@ -257,11 +216,11 @@ class CustomDonkeyEnv(DonkeyEnv):
         # Collision penalty
         collision_penalty = -100.0 if (collision or done) else 0.0
         
-        # Aggregate rewards with appropriate weighting
+        # Aggregate rewards with weighting (customize as needed)
         total_reward = (
-            1.0 * cte_reward - 
-            0.0 * steering_penalty + 
-            0.0 * speed_reward + 
+            1.0 * cte_reward -
+            0.0 * steering_penalty +
+            0.0 * speed_reward +
             0.0 * collision_penalty
         )
         
@@ -276,13 +235,6 @@ class NvidiaCNNExtractor(BaseFeaturesExtractor):
     Custom CNN feature extractor inspired by NVIDIA's architecture for processing image inputs.
     """
     def __init__(self, observation_space: gym.spaces.Box):
-        """
-        Initializes the feature extractor.
-
-        Args:
-            observation_space (gym.spaces.Box): The observation space of the environment.
-        """
-        # Calculate the number of features after the CNN layers
         super(NvidiaCNNExtractor, self).__init__(observation_space, features_dim=100)
         
         self.cnn = nn.Sequential(
@@ -295,20 +247,11 @@ class NvidiaCNNExtractor(BaseFeaturesExtractor):
             nn.Conv2d(48, 64, kernel_size=3, stride=1),  # Output: (64, 2, 5)
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(64 * 2 * 5, 100),  # Adjust based on the output dimensions
+            nn.Linear(64 * 2 * 5, 100),
             nn.ReLU(),
         )
     
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the CNN.
-
-        Args:
-            observations (torch.Tensor): Batch of preprocessed observations.
-
-        Returns:
-            torch.Tensor: Extracted features.
-        """
         return self.cnn(observations)
 
 # ================================
@@ -320,23 +263,11 @@ class AverageRewardCallback(BaseCallback):
     Custom callback for logging and printing the average reward per episode.
     """
     def __init__(self, verbose: int = 0):
-        """
-        Initializes the callback.
-
-        Args:
-            verbose (int): Verbosity level. 0 = no output, 1 = info messages.
-        """
         super(AverageRewardCallback, self).__init__(verbose)
         self.episode_rewards = []
         self.episode_lengths = []
     
     def _on_step(self) -> bool:
-        """
-        Called at every environment step.
-
-        Returns:
-            bool: Whether training should continue.
-        """
         infos = self.locals.get('infos', [])
         for info in infos:
             if 'episode' in info.keys():
@@ -353,12 +284,9 @@ class AverageRewardCallback(BaseCallback):
                           f"Reward = {episode_reward:.2f}, "
                           f"Average Reward = {avg_reward:.2f}, "
                           f"Length = {episode_length}")
-        return True  # Continue training
+        return True
     
     def _on_training_end(self) -> None:
-        """
-        Called at the end of training.
-        """
         if self.episode_rewards:
             final_avg_reward = np.mean(self.episode_rewards)
             print(f"Training completed. Final average reward: {final_avg_reward:.2f}")
@@ -368,24 +296,11 @@ class SACLossLogger(BaseCallback):
     Custom callback for logging SAC loss components to TensorBoard.
     """
     def __init__(self, log_dir: str = "./sac_losses_tensorboard/", verbose: int = 0):
-        """
-        Initializes the callback.
-
-        Args:
-            log_dir (str): Directory to save TensorBoard logs.
-            verbose (int): Verbosity level.
-        """
         super(SACLossLogger, self).__init__(verbose)
         self.writer = SummaryWriter(log_dir)
         self.step_count = 0
     
     def _on_step(self) -> bool:
-        """
-        Called at every environment step.
-
-        Returns:
-            bool: Whether training should continue.
-        """
         if hasattr(self.model, 'policy'):
             policy = self.model.policy
             # Access loss attributes if they exist
@@ -402,12 +317,9 @@ class SACLossLogger(BaseCallback):
             
             self.step_count += 1
         
-        return True  # Continue training
+        return True
     
     def _on_training_end(self) -> None:
-        """
-        Called at the end of training.
-        """
         self.writer.close()
         if self.verbose > 0:
             print("Training completed. Losses have been logged to TensorBoard.")
@@ -422,13 +334,23 @@ def main():
     """
     # Initialize configuration
     config = DonkeyCarConfig()
-    
-    # Set random seed for reproducibility
+
+    # ----------------------------
+    # Enforce deterministic behavior
+    # ----------------------------
     seed = config.env_config["conf"]["random_seed"]
+    os.environ["PYTHONHASHSEED"] = str(seed)  # Make Python's hashing deterministic
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     
+    # Force certain CuDNN behaviors for reproducibility (can slow down training)
+    cudnn.deterministic = True
+    cudnn.benchmark = False
+    # ----------------------------
+
     # Create the environment
     def make_env():
         """
@@ -452,38 +374,39 @@ def main():
     average_reward_callback = AverageRewardCallback(verbose=1)
     sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard/", verbose=1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=10000,                              # Save every 5000 steps
-        save_path='./sac_donkeycar_checkpoints/',    # Directory to save checkpoints
+        save_freq=10000,                           # Save every 10000 steps
+        save_path='./sac_donkeycar_checkpoints/',  # Directory to save checkpoints
         name_prefix='sac_donkeycar',
-        verbose=2                                    # Verbosity level
+        verbose=2
     )
     
     # Combine callbacks into a CallbackList
     callbacks = CallbackList([average_reward_callback, sac_loss_logger, checkpoint_callback])
 
-    # Path to the last checkpoint (replace with your actual path)
+    # Path to the last checkpoint (replace with your actual path if it exists)
     checkpoint_path = "./sac_donkeycar_checkpoints/sac_donkeycar_X_steps.zip"
 
-    # Check if a checkpoint exists
+    # Try to load a previous checkpoint
     try:
         env = VecNormalize.load("vecnormalize_53.pkl", env)
         # Load the model from the checkpoint
         model = SAC.load(checkpoint_path, env=env)
         print(f"Successfully loaded model from checkpoint: {checkpoint_path}")
-        # Access the optimizer and change the learning rate
-        new_learning_rate = 2e-4  # Set your desired learning rate
+        
+        # Optionally modify the learning rate after loading
+        new_learning_rate = 2e-4
         for param_group in model.policy.optimizer.param_groups:
             param_group['lr'] = new_learning_rate
-
         print(f"Learning rate updated to {new_learning_rate}")
 
     except FileNotFoundError:
-
+        # No checkpoint found, train from scratch
         env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
         print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
+        
         # Initialize the SAC model
         model = SAC(
-            policy='MlpPolicy',  # Use 'CnnPolicy' for image-based observations
+            policy='MlpPolicy',  # or 'CnnPolicy' if using raw images (we're preprocessing in env)
             env=env,
             learning_rate=7.3e-4,
             buffer_size=10000,
@@ -497,11 +420,10 @@ def main():
             optimize_memory_usage=False,
             ent_coef="auto",
             target_update_interval=1,
-            #target_entropy=-0.5,
             use_sde=False,
             use_sde_at_warmup=False,
             policy_kwargs=policy_kwargs,
-            verbose=1,  # Set verbosity to see SB3's logging
+            verbose=1,
             seed=seed,
             device="auto",
             tensorboard_log="./sac_donkeycar_tensorboard/",
@@ -517,11 +439,11 @@ def main():
     
     # Save the final model
     model.save("sac_donkeycar_new_track")
-    print("Model saved as 'sac_donkeycar3'")
+    print("Model saved as 'sac_donkeycar_new_track'")
     
     # Save the VecNormalize statistics for future use
     env.save("vecnormalize_new_track.pkl")
-    print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
+    print("VecNormalize statistics saved as 'vecnormalize_new_track.pkl'")
     
     # Close the environment
     env.close()

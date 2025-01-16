@@ -1,5 +1,4 @@
 <launch>
-    <!-- Launch node a.py -->
     <node pkg="mixed_reality"
           type="keyboard_node.py"
           name="keyboard_node"
@@ -16,5 +15,6 @@
     <node pkg="mixed_reality"
           type="simulator_node.py"
           name="simulator_node"
-          output="screen" />
+          output="screen"
+          launch-prefix="bash -c 'sleep 5; $0 $@'" />
 </launch>

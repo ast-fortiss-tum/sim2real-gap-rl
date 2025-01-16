@@ -35,11 +35,14 @@ from rospy.numpy_msg import numpy_msg
 
 class DonkeySimMsgHandler(IMesgHandler):
     def __init__(self):
+
+        self.SceneToLoad = "generated_road"
         
         self.fns = {'telemetry' : self.on_telemetry,\
                     'car_loaded' : self.on_car_created,\
                     'on_disconnect' : self.on_disconnect,
-                    'aborted' : self.on_aborted}
+                    'aborted' : self.on_aborted,
+                    }
         
         self.cte=0.0
         self.speed=0.0
@@ -67,7 +70,7 @@ class DonkeySimMsgHandler(IMesgHandler):
         rotation_angle_degrees = rotation_angle_degrees % 360
         
         return rotation_angle_degrees
-
+    
 
     def on_recv_message(self, message):
         # self.timer.on_frame()
@@ -155,6 +158,9 @@ class DonkeySimMsgHandler(IMesgHandler):
             'road_style': road_style.__str__(),
             'rand_seed': rand_seed.__str__(),
             'turn_increment': turn_increment.__str__() }
+
+    def queue_message(self, msg) -> None:
+        self.client.queue_message(msg)
         
 class For_convertion_utils():
     def __init__(self,size_factor,x_map_shift,y_map_shift,angle_shift):
