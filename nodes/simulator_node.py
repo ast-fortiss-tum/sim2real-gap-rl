@@ -299,7 +299,10 @@ def new_reset(msg):
     global position_tracked
     print("\nRESETTING SCENARIO AAAAA")
     #read initial road configuration from json file
-    f = open("/home/cubos98/catkin_ws/src/Vehicle/road_totest3.json", "r")
+    # Get the parent directory of the current script
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(parent_dir, "road_totest3.json")
+    f = open(file_path, "r")
     map_data = json.loads(f.read())
     f.close()
     print("HOLAAAAAAAA.    ")
@@ -362,7 +365,9 @@ def simulator_node():
 
     #read initial road configuration from json file
     print("\nINITIALIZING SCENARIO")
-    f = open("/home/cubos98/catkin_ws/src/Vehicle/road_totest3.json", "r")
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(parent_dir, "road_totest3.json")
+    f = open(file_path, "r")
     map_data = json.loads(f.read())
     f.close()
     simulator_client.msg_handler.reset_scenario(0,map_data["road_definition"])
