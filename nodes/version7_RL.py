@@ -133,6 +133,57 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
 
     return observation
 
+def revert_preprocess_image(preprocessed: np.ndarray, original_size: tuple = (80, 60), add_alpha: bool = False) -> np.ndarray:
+    """
+    Reverts the preprocessing steps applied to the image.
+
+    Steps (reverse order of preprocess_image):
+    1. Transpose from channel-first to HWC format.
+    2. Denormalize pixel values from [0, 1] to [0, 255].
+    3. Resize the image back to the original size (optional).
+    4. Convert YUV back to RGB color space.
+    5. Add an alpha channel if desired.
+
+    Args:
+        preprocessed (np.ndarray): The preprocessed image.
+        original_size (tuple): The target size to resize the image to (width, height). Default is (80, 60).
+        add_alpha (bool): Whether to add an alpha channel (RGBA). Default is False.
+
+    Returns:
+        np.ndarray: The reverted image in RGB or RGBA format.
+    """
+    # Step 1: Transpose back to HWC format
+    if preprocessed.ndim != 3 or preprocessed.shape[0] not in [1, 3, 4]:
+        raise ValueError("Preprocessed image must be in channel-first format with 1, 3, or 4 channels.")
+    
+    image = np.transpose(preprocessed, (1, 2, 0))  # From (C, H, W) to (H, W, C)
+    
+    # Step 2: Denormalize pixel values from [0, 1] to [0, 255]
+    image = (image * 255.0).astype(np.uint8)
+    
+    # Step 3: Resize back to original size if different
+    if original_size != (80, 60):
+        image = cv2.resize(image, original_size, interpolation=cv2.INTER_LINEAR)
+    
+    # Step 4: Convert YUV back to RGB
+    try:
+        f = 1
+        image = cv2.cvtColor(image, cv2.COLOR_YUV2RGB)
+    except cv2.error as e:
+        raise ValueError(f"Error converting YUV to RGB: {e}")
+    
+    # Step 5: Add alpha channel if required
+    if add_alpha:
+        if image.shape[2] == 3:
+            alpha_channel = np.full((image.shape[0], image.shape[1], 1), 255, dtype=np.uint8)  # Fully opaque
+            image = np.concatenate((image, alpha_channel), axis=2)
+        elif image.shape[2] == 4:
+            pass  # Image already has alpha channel
+        else:
+            raise ValueError("Image has an unexpected number of channels.")
+    
+    return image
+
 # ================================
 # 4. Custom Environment
 # ================================
@@ -216,7 +267,9 @@ class CustomDonkeyEnv(DonkeyEnv):
             np.ndarray: The preprocessed initial observation.
         """
         observation = super().reset()
+        print(observation.shape)
         return preprocess_image(observation)
+        #return observation
     
     def compute_reward(
         self, 
@@ -497,7 +550,7 @@ def main():
             optimize_memory_usage=False,
             ent_coef="auto",
             target_update_interval=1,
-            #target_entropy=-0.5,
+            target_entropy=0.2,
             use_sde=False,
             use_sde_at_warmup=False,
             policy_kwargs=policy_kwargs,

@@ -28,7 +28,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 # Local Modules
 import gym_donkeycar
 from gym_donkeycar.envs.donkey_env import DonkeyEnv
-from version7_RL import DonkeyCarConfig, CustomDonkeyEnv, preprocess_image
+from version7_RL import DonkeyCarConfig, CustomDonkeyEnv, preprocess_image, revert_preprocess_image
 
 # ================================
 # 2. Save Images Function
@@ -48,6 +48,13 @@ def save_images_from_policy(model, env, save_path, delay=1.0):
         os.makedirs(save_path)
 
     obs = env.reset()
+    print("1:  ", obs.shape)
+    obs = obs[0,:,:,:]
+    obs = revert_preprocess_image(obs)
+    print("2:  ", obs.shape)
+
+    time.sleep(10)
+
     done = False
     image_count = 0
 
@@ -59,17 +66,26 @@ def save_images_from_policy(model, env, save_path, delay=1.0):
         if obs.shape[-1] == 4:  # RGBA image
             obs = obs[:, :, :3]  # Convert to RGB if necessary  
 
-        print(obs.shape)
-        time.sleep(15)
+    
+        #obs = obs[0,:,:,:].transpose(1,2,0)
 
-        
+        #print(obs.unsqueeze(0).shape)
+        #DIR_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+        #imagej = Image.open(DIR_PATH + "/first_image_received.jpg")
+        #imagej = np.array(imagej)
+        #print("HHH:  ", type(imagej))
+        #print("HHH:  ", obs[:,:,0])
+
+        time.sleep(10)
 
         # Convert the image to PIL format for saving
+        #pil_image1 = Image.fromarray(imagej)
         pil_image = Image.fromarray(obs)
 
         # Save the image with a timestamp and count
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        image_path = os.path.join(save_path, f"image_{timestamp}_{image_count}.jpg")
+        image_path = os.path.join(save_path, f"image_{timestamp}_{image_count}.png")
         pil_image.save(image_path)
         print(f"Saved image: {image_path}")     
 
@@ -118,7 +134,8 @@ def main():
         env = VecNormalize.load(vec_normalize_path, env)
 
     # Load the trained SAC model
-    model_path = "sac_donkeycar_final.zip"
+    DIR_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    model_path = DIR_PATH + "/sac_donkeycar_checkpoints/sac_donkeycar_70000_steps"
     model = SAC.load(model_path)
     print(f"Successfully loaded model from checkpoint: {model_path}")
 
