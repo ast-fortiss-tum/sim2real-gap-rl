@@ -154,7 +154,7 @@ class DonkeyCarConfig:
             "bio": "Learning to drive with SAC",
             "guid": str(uuid.uuid4()),
             "random_seed": random.randint(0, 10000),
-            "max_cte": 0.8,
+            "max_cte": 2.0,
             "frame_skip": 1,
             "cam_resolution": (240, 320, 4),
         }
@@ -253,7 +253,7 @@ def preprocess_image(observation: np.ndarray) -> np.ndarray:
     #observation = np.transpose(observation, (2, 0, 1)).astype(np.float32)
     #
     # Step 2: Resize to (80, 60)
-    img = out_pil.resize((80, 60), Image.ANTIALIAS)
+    img = out_pil.resize((80, 60), Image.Resampling.LANCZOS)
     #print(f"Resized image size: {img.size}")
 
     # Step 3: Convert to NumPy array and normalize to [0, 1]
@@ -503,6 +503,56 @@ class AverageRewardCallback(BaseCallback):
             final_avg_reward = np.mean(self.episode_rewards)
             print(f"Training completed. Final average reward: {final_avg_reward:.2f}")
 
+class SavePreprocessedObservationCallback(BaseCallback):
+    """
+    Callback for saving the post-processed observations to a directory every 'save_freq' steps.
+    Assumes your environment observations are already scaled to [0, 1] with shape (C, H, W).
+    """
+    def __init__(self, save_freq=1000, save_dir="./saved_observations", verbose=1):
+        """
+        :param save_freq: (int) How often (in timesteps) we save an image.
+        :param save_dir: (str) Directory to save the images.
+        :param verbose: (int) Verbosity level.
+        """
+        super(SavePreprocessedObservationCallback, self).__init__(verbose)
+        self.save_freq = save_freq
+        self.save_dir = save_dir
+        os.makedirs(self.save_dir, exist_ok=True)
+
+    def _on_step(self) -> bool:
+        """
+        This method is called at every step. We check if `n_calls` (the number of calls)
+        is a multiple of `save_freq`. If so, we save the observation.
+        """
+        # 'new_obs' in self.locals is the observation *after* the current step
+        # Shape is typically (n_envs, C, H, W) when using a VecEnv
+        current_obs = self.locals["new_obs"]  # A numpy array or tensor
+
+        # Check if the callback has been called a multiple of save_freq steps
+        if self.n_calls % self.save_freq == 0:
+            # We only save the observation from the first environment in the vectorized env
+            obs = current_obs[0]  # Shape: (C, H, W)
+            
+            # Convert from (C, H, W) to (H, W, C)
+            obs = np.transpose(obs, (1, 2, 0))  # Now shape: (H, W, C)
+            
+            # Scale up to [0, 255] if needed (assuming your obs is in [0, 1])
+            obs = (obs * 255.0).clip(0, 255).astype(np.uint8)
+            
+            # Convert from RGB to BGR for OpenCV
+            obs_bgr = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
+            
+            # Create a filename
+            filename = os.path.join(self.save_dir, f"step_{self.n_calls}.png")
+            # Save the image
+            cv2.imwrite(filename, obs_bgr)
+
+            if self.verbose > 0:
+                print(f"[SaveObsCallback] Saved post-processed observation at step={self.n_calls} to {filename}")
+        
+        return True  # Return False to stop training early
+
+
 class SACLossLogger(BaseCallback):
     """
     Custom callback for logging SAC loss components to TensorBoard.
@@ -581,7 +631,7 @@ def main():
     env = DummyVecEnv([make_env])  # Vectorized environment
     
     # Apply normalization to observations and rewards
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    #env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
     
     # Define policy keyword arguments with custom feature extractor
     policy_kwargs = dict(
@@ -590,23 +640,29 @@ def main():
     
     # Initialize callbacks
     average_reward_callback = AverageRewardCallback(verbose=1)
-    sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard/", verbose=1)
+    sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard_GAN/", verbose=1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=10000,                              # Save every 5000 steps
-        save_path='./sac_donkeycar_checkpoints/',    # Directory to save checkpoints
-        name_prefix='sac_donkeycar',
+        save_freq=5000,                              # Save every 5000 steps
+        save_path='./sac_donkeycar_checkpoints_GAN/',    # Directory to save checkpoints
+        name_prefix='sac_donkeycar_GAN',
         verbose=2                                    # Verbosity level
+    )
+
+    save_observation_callback = SavePreprocessedObservationCallback(
+        save_freq=1,
+        save_dir="./saved_preprocessed_observations",
+        verbose=1
     )
     
     # Combine callbacks into a CallbackList
-    callbacks = CallbackList([average_reward_callback, sac_loss_logger, checkpoint_callback])
+    callbacks = CallbackList([sac_loss_logger, checkpoint_callback])
 
     # Path to the last checkpoint (replace with your actual path)
     checkpoint_path = "./sac_donkeycar_checkpoints/sac_donkeycar_X_steps.zip"
 
     # Check if a checkpoint exists
     try:
-        env = VecNormalize.load("vecnormalize_53.pkl", env)
+        #env = VecNormalize.load("vecnormalize_53.pkl", env)
         # Load the model from the checkpoint
         model = SAC.load(checkpoint_path, env=env)
         print(f"Successfully loaded model from checkpoint: {checkpoint_path}")
@@ -619,7 +675,7 @@ def main():
 
     except FileNotFoundError:
 
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        #env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
         print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
         # Initialize the SAC model
         model = SAC(
@@ -644,11 +700,11 @@ def main():
             verbose=1,  # Set verbosity to see SB3's logging
             seed=seed,
             device="auto",
-            tensorboard_log="./sac_donkeycar_tensorboard/",
+            tensorboard_log="./sac_donkeycar_tensorboard_GAN/",
         )
     
     # Start training
-    total_timesteps = 20000  # Replace with desired number of timesteps
+    total_timesteps = 100000  # Replace with desired number of timesteps
     print("Starting training...")
     model.learn(
         total_timesteps=total_timesteps,
@@ -660,8 +716,8 @@ def main():
     print("Model saved as 'sac_donkeycar3'")
     
     # Save the VecNormalize statistics for future use
-    env.save("vecnormalize_new_track.pkl")
-    print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
+    #env.save("vecnormalize_new_track.pkl")
+    #print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
     
     # Close the environment
     env.close()

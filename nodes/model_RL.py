@@ -24,7 +24,23 @@ model = None
 pub_throttle_steering = None
 bridge = CvBridge()
 
+prev_time = None
+
 def new_image(msg):
+
+    global prev_time
+    now = time.time()
+    if prev_time is not None and (now - prev_time) < 0.05:
+        return
+    prev_time = now
+
+    #if prev_time is None:
+    #    prev_time = time.time()
+    #elif prev_time - time.time() < 0.2:
+    #    prev_time = time.time()
+    #else:
+    #    return
+    
     global FIXED_THROTTLE
     global model
     global pub_throttle_steering
@@ -41,12 +57,19 @@ def new_image(msg):
     steering = action[0]
 
     if FIXED_THROTTLE:
-        throttle = 0.5
+        throttle = 0.3
 
     # Publish throttle and steering commands
     if pub_throttle_steering is None:
         pub_throttle_steering = rospy.Publisher("model/throttle_steering", Control, queue_size=10)
-    msg = Control(throttle, steering, False, False, False)
+    msg = Control()
+    msg.throttle = throttle
+    msg.steering = steering
+    msg.brake = False
+    msg.reverse = False
+    msg.stopping = False
+    #msg.header.stamp = rospy.Time.now()
+    
     pub_throttle_steering.publish(msg)
 
 def model_node():
@@ -54,11 +77,11 @@ def model_node():
     global model
 
     print(f"Loading model: {MODEL_PATH}")
-    model = SAC.load(MODEL_PATH)  # Load the Stable-Baselines3 SAC model
+    model = SAC.load(MODEL_PATH, device="cpu")  # Load the Stable-Baselines3 SAC model
     print("Model loaded successfully.")
 
     rospy.init_node("model_node", anonymous=True)
-    rate = rospy.Rate(3)  # Set the desired frequency to 3 Hz
+    rate = rospy.Rate(5)  # Set the desired frequency to 3 Hz
     rospy.Subscriber("/sim/image", SensorImage, new_image)
 
     while not rospy.is_shutdown():

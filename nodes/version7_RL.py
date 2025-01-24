@@ -66,7 +66,7 @@ class DonkeyCarConfig:
         "host": "127.0.0.1",
         "port": 9091,
         "start_delay": 5.0,
-        "max_cte": 2.0,
+        "max_cte": 3.0,
         "frame_skip": 1,
         "cam_resolution": (120, 160, 3), #(240, 320, 4)
         "host": "localhost",
@@ -82,7 +82,7 @@ class DonkeyCarConfig:
             "bio": "Learning to drive with SAC",
             "guid": str(uuid.uuid4()),
             "random_seed": random.randint(0, 10000),
-            "max_cte": 0.8,
+            "max_cte": 8.0,
             "frame_skip": 1,
             "cam_resolution": (240, 320, 4),
         }
@@ -192,7 +192,7 @@ class CustomDonkeyEnv(DonkeyEnv):
     """
     Custom DonkeyCar environment with image preprocessing and tailored reward function for line tracking.
     """
-    def __init__(self, level: str, conf: dict):
+    def __init__(self, level: str, conf: dict, step_delay: float = 0.0):
         """
         Initializes the custom environment.
 
@@ -202,6 +202,9 @@ class CustomDonkeyEnv(DonkeyEnv):
         """
         super(CustomDonkeyEnv, self).__init__(level=level, conf=conf)
         
+                # Store the step delay
+        self.step_delay = step_delay
+
         # Define the observation space based on preprocessed image dimensions
         self.observation_space = gym.spaces.Box(
             low=0.0, 
@@ -218,9 +221,11 @@ class CustomDonkeyEnv(DonkeyEnv):
             dtype=np.float32
         )"""
 
+        self.start_cycle_time = time.time()
+
         self.action_space = gym.spaces.Box(
-            low=np.array([-0.9]), 
-            high=np.array([0.9]), 
+            low=np.array([-0.99]), 
+            high=np.array([0.99]), 
             dtype=np.float32
         )
         
@@ -230,6 +235,7 @@ class CustomDonkeyEnv(DonkeyEnv):
         self.target_speed = 0.8  # Define a target speed for the agent
     
     def step(self, action: np.ndarray) -> tuple:
+
         """
         Executes a step in the environment with the given action.
 
@@ -243,6 +249,20 @@ class CustomDonkeyEnv(DonkeyEnv):
                 - done (bool): Flag indicating if the episode has ended.
                 - info (dict): Additional information from the environment.
         """
+
+        # The "SAME POINT" in your code: measure cycle
+        #current_time = time.time()
+        #cycle_duration = current_time - self.start_cycle_time
+        #print(f"Cycle took {cycle_duration:.4f} seconds")
+        # ---------------------------------------------
+
+        # Reset for the next cycle measurement
+        #self.start_cycle_time = time.time()
+
+        # Introduce the desired delay each step
+        if self.step_delay > 0:
+            time.sleep(self.step_delay)
+
         # Execute the action with a constant throttle of 0.5
         #observation, original_reward, done, info = super().step([action[0], action[1]])
         observation, original_reward, done, info = super().step([action[0], 0.3])
@@ -487,14 +507,14 @@ def main():
         """
         Creates and returns a wrapped DonkeyCar environment.
         """
-        env = CustomDonkeyEnv(level=config.env_list[1], conf=config.env_config)
+        env = CustomDonkeyEnv(level=config.env_list[1], conf=config.env_config, step_delay = 0.0)
         env = Monitor(env)  # Wrap with Monitor to track episode statistics
         return env
     
     env = DummyVecEnv([make_env])  # Vectorized environment
     
     # Apply normalization to observations and rewards
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    #env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
     
     # Define policy keyword arguments with custom feature extractor
     policy_kwargs = dict(
@@ -506,7 +526,7 @@ def main():
     sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard/", verbose=1)
     checkpoint_callback = CheckpointCallback(
         save_freq=10000,                              # Save every 5000 steps
-        save_path='./sac_donkeycar_checkpoints/',    # Directory to save checkpoints
+        save_path='./sac_donkeycar_checkpoints_new/',    # Directory to save checkpoints
         name_prefix='sac_donkeycar',
         verbose=2                                    # Verbosity level
     )
@@ -519,7 +539,7 @@ def main():
 
     # Check if a checkpoint exists
     try:
-        env = VecNormalize.load("vecnormalize_53.pkl", env)
+        #env = VecNormalize.load("vecnormalize_53.pkl", env)
         # Load the model from the checkpoint
         model = SAC.load(checkpoint_path, env=env)
         print(f"Successfully loaded model from checkpoint: {checkpoint_path}")
@@ -532,14 +552,16 @@ def main():
 
     except FileNotFoundError:
 
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
-        print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
+        #env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        #print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch.")
         # Initialize the SAC model
+        alpha_opt_kwargs = dict(learning_rate=1e-4)  # Lower default might be 1e-3
+
         model = SAC(
             policy='MlpPolicy',  # Use 'CnnPolicy' for image-based observations
             env=env,
             learning_rate=7.3e-4,
-            buffer_size=10000,
+            buffer_size=70000,
             learning_starts=1,
             batch_size=256,
             tau=0.02,
@@ -550,10 +572,11 @@ def main():
             optimize_memory_usage=False,
             ent_coef="auto",
             target_update_interval=1,
-            target_entropy=0.2,
+            target_entropy=-0.1,
             use_sde=False,
             use_sde_at_warmup=False,
             policy_kwargs=policy_kwargs,
+            log_alpha_opt_kwargs=alpha_opt_kwargs,
             verbose=1,  # Set verbosity to see SB3's logging
             seed=seed,
             device="auto",
@@ -561,7 +584,7 @@ def main():
         )
     
     # Start training
-    total_timesteps = 20000  # Replace with desired number of timesteps
+    total_timesteps = 100000  # Replace with desired number of timesteps
     print("Starting training...")
     model.learn(
         total_timesteps=total_timesteps,
@@ -573,8 +596,8 @@ def main():
     print("Model saved as 'sac_donkeycar3'")
     
     # Save the VecNormalize statistics for future use
-    env.save("vecnormalize_new_track.pkl")
-    print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
+    #env.save("vecnormalize_new_track.pkl")
+    #print("VecNormalize statistics saved as 'vecnormalize3.pkl'")
     
     # Close the environment
     env.close()

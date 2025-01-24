@@ -46,6 +46,9 @@ def evaluate_policy_with_delay(model, env: VecEnv, n_eval_episodes: int = 10, de
     :return: Mean reward per episode and standard deviation of rewards.
     """
     episode_rewards = []
+    now = None
+    time_t = 0
+
     for episode in range(n_eval_episodes):
         obs = env.reset()
         done = False
@@ -61,6 +64,10 @@ def evaluate_policy_with_delay(model, env: VecEnv, n_eval_episodes: int = 10, de
             env.render()
             # Wait for the specified delay
             time.sleep(delay)
+            #if now is not None:
+            #    time_t = now - time.time()
+            #now = time.time()
+            #print(time_t)
         episode_rewards.append(episode_reward)
 
     mean_reward = sum(episode_rewards) / n_eval_episodes
@@ -93,10 +100,10 @@ def main():
     env = DummyVecEnv([make_env])  # Vectorized environment
     
     # Check if a checkpoint exists
-    env = VecNormalize.load("nodes/vecnormalize_53.pkl", env)
+    #env = VecNormalize.load("nodes/vecnormalize_53.pkl", env)
 
     # Load the trained model
-    model_path = "sac_donkeycar3.zip"
+    model_path = "sac_donkeycar_70000_steps.zip"
     model = SAC.load(model_path)
     print(f"Successfully loaded model from checkpoint: {model_path}")
 
@@ -106,7 +113,7 @@ def main():
 
     # Test the model in the environment     
 
-    mean_reward, std_reward = evaluate_policy_with_delay(model, env, n_eval_episodes=10, delay=0.1)
+    mean_reward, std_reward = evaluate_policy_with_delay(model, env, n_eval_episodes=10, delay=0.09)
     print(f"Mean reward: {mean_reward} +/- {std_reward}")
 
     # Close the environment
