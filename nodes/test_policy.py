@@ -30,7 +30,7 @@ from torch.utils.tensorboard import SummaryWriter
 # Local Modules
 import gym_donkeycar
 from gym_donkeycar.envs.donkey_env import DonkeyEnv
-from version7_RL import DonkeyCarConfig, CustomDonkeyEnv
+from training.version7_RL import DonkeyCarConfig, CustomDonkeyEnv
 
 import time
 from stable_baselines3.common.vec_env import VecEnv
@@ -54,6 +54,7 @@ def evaluate_policy_with_delay(model, env: VecEnv, n_eval_episodes: int = 10, de
         done = False
         episode_reward = 0
         while not done:
+            print("time:  ", time.time())
             # Predict the action using the model
             action, _states = model.predict(obs, deterministic=True)
             # Take a step in the environment
@@ -103,7 +104,24 @@ def main():
     #env = VecNormalize.load("nodes/vecnormalize_53.pkl", env)
 
     # Load the trained model
-    model_path = "sac_donkeycar_70000_steps.zip"
+    #model_path = "./final_models/sac_donkeycar_200000_steps.zip"
+    #model_path2 = "./final_models/Model_try_1_normalized.zip"
+    #model_path = "./final_models/very_very_good_vanilla_m1.zip"
+    model_path = "./final_models/very_good_GAN_m2.zip"
+
+    ################
+
+    #check2 = torch.load(model_path2, map_location=torch.device('cpu'))
+    #check = torch.load(model_path, map_location=torch.device('cpu'))
+
+
+    #print("Does nor work:   ", check2.keys())
+    #print("Works:  ", check.keys())
+    
+
+    ################
+
+
     model = SAC.load(model_path)
     print(f"Successfully loaded model from checkpoint: {model_path}")
 
@@ -113,7 +131,7 @@ def main():
 
     # Test the model in the environment     
 
-    mean_reward, std_reward = evaluate_policy_with_delay(model, env, n_eval_episodes=10, delay=0.09)
+    mean_reward, std_reward = evaluate_policy_with_delay(model, env, n_eval_episodes=10, delay=0.0)
     print(f"Mean reward: {mean_reward} +/- {std_reward}")
 
     # Close the environment
