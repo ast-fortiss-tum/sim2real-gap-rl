@@ -112,7 +112,7 @@ def plot_parameter_subplot(ax, param_data, going_data, param_key, window_size=10
     t_param_max = time_array.max()
     
     # Fill the entire parameter time range with red (Not going), zorder low.
-    ax.axvspan(t_param_min, t_param_max, facecolor='red', alpha=0.3, label="Not going", zorder=1)
+    ax.axvspan(t_param_min, t_param_max, facecolor='red', alpha=0.4, label="Not going", zorder=1)
     
     # --- Parse going data ---
     going_time_raw = going_data.get("time")
@@ -142,35 +142,37 @@ def plot_parameter_subplot(ax, param_data, going_data, param_key, window_size=10
         interval_end = min(end, t_param_max)
         if interval_start < interval_end:
             if going_values[i]:
-                ax.axvspan(interval_start, interval_end, facecolor='green', alpha=0.3, 
+                ax.axvspan(interval_start, interval_end, facecolor='green', alpha=0.4, 
                            label="Going" if i == 0 else None, zorder=2)
     
     # --- Plot the smoothed parameter curve on top (zorder high) ---
     ax.plot(t_avg, ma, label=f"{param_key} (smoothed)", color=color, zorder=3)
-    ax.fill_between(t_avg, ma - std, ma + std, color=color, alpha=0.2, zorder=3)
+    #ax.fill_between(t_avg, ma - std, ma + std, color=color, alpha=0.1, zorder=3)
     
-    ax.set_title(f"{param_key.capitalize()} with Movement Partition")
+    ax.set_title(f"{param_key.capitalize()} with Movement Partition (Abs. Value)")
     ax.set_xlabel("Time")
     ax.set_ylabel(param_key.capitalize())
     ax.legend()
     ax.grid(True)
 
-def calculate_cte_below_percentage(param_data, going_data, threshold):
+def calculate_cte_below_percentage(param_data, going_data, cte_threshold, speed_threshold):
     """
     Calculate the percentage of time (only during the 'green' intervals from the going data)
-    that 'cte' is below a specified threshold.
+    that 'cte' is below a specified threshold, ignoring intervals where speed is below a 
+    specified speed threshold.
     
     The function uses:
-      - The time and cte arrays from param_data (which must contain "time" and "cte").
+      - The time, cte, and speed arrays from param_data (which must contain "time", "cte", and "speed").
       - The time and going arrays from going_data (which must contain "time" and "going").
     
     It assumes that:
       1. The parameter time stamps are in order.
-      2. The cte value at time[i] represents the interval from time[i] to time[i+1].
+      2. The cte and speed values at time[i] represent the interval from time[i] to time[i+1].
       3. The going data intervals are used to decide whether a given time interval is "green" (i.e. moving).
          (For each parameter interval, we use the midpoint to determine its status.)
     
-    The function returns the percentage (relative to the total green time) during which cte < threshold.
+    The function returns the percentage (relative to the total green time in which speed is high)
+    during which cte < cte_threshold.
     """
     # --- Parse and normalize parameter data ---
     time_raw = param_data.get("time")
@@ -181,16 +183,24 @@ def calculate_cte_below_percentage(param_data, going_data, threshold):
     if time_values is None:
         return None
     time_array = np.array(time_values)
-    # Shift parameter time so that it starts at 0.
+    # Shift the parameter time so that it starts at 0.
     param0 = time_array[0]
     time_array = time_array - param0
 
+    # Get cte values.
     cte_values = param_data.get("cte")
     if cte_values is None:
         print("Parameter JSON does not contain a 'cte' key.")
         return None
     cte_array = np.array(cte_values)
-
+    
+    # Get speed values.
+    speed_values = param_data.get("speed")
+    if speed_values is None:
+        print("Parameter JSON does not contain a 'speed' key.")
+        return None
+    speed_array = np.array(speed_values)
+    
     # --- Parse and normalize going data ---
     going_time_raw = going_data.get("time")
     if going_time_raw is None:
@@ -210,13 +220,12 @@ def calculate_cte_below_percentage(param_data, going_data, threshold):
     if going_values is None:
         return None
 
-    # --- Compute durations only within "green" (moving) intervals ---
+    # --- Compute durations only within "green" (moving) intervals and with sufficient speed ---
     total_green_time = 0.0
     below_threshold_green_time = 0.0
 
-    # For each interval in the parameter time series, assume the cte value at index i
-    # represents the interval from time_array[i] to time_array[i+1].
-    # We use the midpoint of the interval to decide if that interval falls in a green period.
+    # For each interval in the parameter time series, we assume the cte and speed values at index i
+    # represent the interval from time_array[i] to time_array[i+1]. We use the midpoint to decide if that interval falls in a green period.
     if len(time_array) < 2:
         print("Not enough time samples to compute durations.")
         return None
@@ -228,20 +237,20 @@ def calculate_cte_below_percentage(param_data, going_data, threshold):
         t_mid = (t_start + t_end) / 2.0
 
         # Find the corresponding going interval for t_mid.
-        # We assume going_time_array is sorted.
         green = False
         for j in range(len(going_time_array) - 1):
             if going_time_array[j] <= t_mid < going_time_array[j+1]:
                 green = going_values[j]  # True if "going", False otherwise.
                 break
 
-        if green:
+        # Only consider intervals that are "green" and where speed is at or above the speed threshold.
+        if green and speed_array[i] >= speed_threshold:
             total_green_time += duration
-            if cte_array[i] < threshold:
+            if cte_array[i] < cte_threshold:
                 below_threshold_green_time += duration
 
     if total_green_time == 0:
-        print("No green intervals found.")
+        print("No green intervals found with speed above the threshold.")
         return None
 
     percentage = (below_threshold_green_time / total_green_time) * 100
@@ -272,10 +281,13 @@ def main(window_size=100):
     param_data = load_data(parameter_json_file)
     going_data = load_data(going_json_file)
 
-    perc = calculate_cte_below_percentage(param_data, going_data, threshold=4.0)
+    cte_threshold = 2.0
+    speed_threshold = 10.0
+
+    perc = calculate_cte_below_percentage(param_data, going_data, cte_threshold=cte_threshold, speed_threshold=speed_threshold)
 
     if perc is not None:
-        print(f"Percentage of green time with cte below 3.0: {perc:.2f}%")
+        print(f"Percentage of green time with cte below {cte_threshold} and speed above {speed_threshold}: {perc:.2f}%")
     
     # Create a single figure with two subplots (one for speed, one for cte).
     fig, axs = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -283,13 +295,17 @@ def main(window_size=100):
     # Plot "speed" in the first subplot.
     plot_parameter_subplot(axs[0], param_data, going_data, "speed", window_size=window_size, color="blue")
     # Plot "cte" in the second subplot.
-    plot_parameter_subplot(axs[1], param_data, going_data, "cte", window_size=window_size, color="orange")
+    plot_parameter_subplot(axs[1], param_data, going_data, "cte", window_size=window_size, color="black")
+
+    axs[0].set_ylim(0.0, 300.0)
+    axs[1].set_ylim(0.0, 8.0)
     
     plt.tight_layout()
+    plt.savefig(f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/figures/{name}_cte{cte_threshold}_speed{speed_threshold}_ws{window_size}_percSuccess_{perc}.png')
     plt.show()
 
 if __name__ == '__main__':
-    main(window_size=50)
+    main(window_size=200)
 
 
 
