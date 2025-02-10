@@ -268,7 +268,6 @@ class BaseTrainer(BaseRunner):
                 self.wrapper, self.fixed_start, normalize_actions=self.normalize_actions
             )
 
-
 class SingleAgentTrainer(BaseTrainer):
     def __init__(
         self,

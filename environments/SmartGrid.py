@@ -133,14 +133,12 @@ class SmartGridBasic:
         # --- Define Components ---
         # Create the energy storage system using the subclass's definition.
         self.e1 = self.define_e1()
-        self.agent1.add_entity(self.e1)
 
         self.r1 = RenewableGen("PV1").add_data_provider(self.dp3)
         self.d1 = Load("Load1").add_data_provider(self.dp1)
 
         # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()).add_node(self.n1).add_node(self.m1)
-        self.agent1.add_system(self.sys)
         self.n1.add_node(self.d1).add_node(self.e1).add_node(self.r1)
 
         # (Optional) Print the system structure.

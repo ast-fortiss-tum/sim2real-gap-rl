@@ -16,9 +16,9 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--save-model', type=str, default="",
                     help='name of Mujoco environement')
-parser.add_argument('--train-steps', type=int, default=4000,
+parser.add_argument('--train-steps', type=int, default=24*50,
                     help='name of Mujoco environement')
-parser.add_argument('--max-steps', type=int, default=1000,
+parser.add_argument('--max-steps', type=int, default=24,
                     help='name of Mujoco environement')
 parser.add_argument('--save_file_name', type=str, default='Smart_Grids',
                     help='name of Mujoco environement')
@@ -81,7 +81,7 @@ target_env = SmartGrid_Nonlinear(
     fixed_start="27.11.2016",
     capacity=3,
     data_path="./data/1-LV-rural2--1-sw",
-    params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.9, "etad": 0.9, "etas": 0.99}
+    params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.6, "etad": 0.7, "etas": 0.8}
 ).env
 
 source_env._max_episode_steps = 24
