@@ -1,5 +1,5 @@
-import gym
-# import gymnasium as gym
+#import gym
+import gymnasium as gym
 
 import datetime
 from models.darc import DARC
@@ -20,7 +20,7 @@ parser.add_argument('--train-steps', type=int, default=4000,
                     help='name of Mujoco environement')
 parser.add_argument('--max-steps', type=int, default=1000,
                     help='name of Mujoco environement')
-parser.add_argument('--save_file_name', type=str, default='',
+parser.add_argument('--save_file_name', type=str, default='Smart_Grids',
                     help='name of Mujoco environement')
 parser.add_argument('--lr', type=float, default=1e-4,
                     help='name of Mujoco environement')
@@ -35,28 +35,23 @@ parser.add_argument('--deltar', type=float, default=1,
 parser.add_argument('--env-name', type=str, default="Smart_Grids",
                     help='name of Mujoco environement')
 
-
 parser.add_argument('--normalize', type=int, default=1,
                     help='break which joint')
 
-
 parser.add_argument('--noise', type=float, default=0.0,
                     help='name of Mujoco environement')
-
 
 parser.add_argument('--policynet', type=int, default=256,
                     help='break which joint')
 parser.add_argument('--classifier', type=int, default=32,
                     help='break which joint')
 
-parser.add_argument('--warmup', type=int, default=50,
+parser.add_argument('--warmup', type=int, default=12,
                     help='break which joint')
 
 args = parser.parse_args()
 
 env_name = args.env_name
-variety_name = args.variety_name
-degree = args.degree
 save_model_path = args.save_model
 train_steps = args.train_steps
 
@@ -72,22 +67,26 @@ save_model_path += '_'
 save_model_path += str(env_name)
 
 source_env = SmartGrid_Linear(
-    horizon=timedelta(hours=12),
-    frequency=timedelta(minutes=30),
-    fixed_start="01.01.2020",
+    horizon=timedelta(hours=24),
+    frequency=timedelta(minutes=60),
+    fixed_start="27.11.2016",
     capacity=3,
-    data_path="/path/to/your/data"
+    data_path="./data/1-LV-rural2--1-sw",
+    params_battery={"rho": 0.1, "p_lim": 2.0}
 ).env
 
 target_env = SmartGrid_Nonlinear(
-    horizon=timedelta(hours=12),
-    frequency=timedelta(minutes=30),
-    fixed_start="01.01.2020",
+    horizon=timedelta(hours=24),
+    frequency=timedelta(minutes=60),
+    fixed_start="27.11.2016",
     capacity=3,
-    data_path="/path/to/your/data"
+    data_path="./data/1-LV-rural2--1-sw",
+    params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.9, "etad": 0.9, "etas": 0.99}
 ).env
 
-# env._max_episode_steps = 3000
+source_env._max_episode_steps = 24
+target_env._max_episode_steps = 24
+
 state_dim = source_env.observation_space.shape[0]
 action_dim = source_env.action_space.shape[0]
 

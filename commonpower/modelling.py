@@ -1147,7 +1147,7 @@ class ControllableModelEntity(ModelEntity):
         # ToDo: check type of variables/data --> if they are binary, we cannot use box spaces?
         # for now all model elements with type DATA and STATE are observations
         obs = [e for e in self.model_elements if e.name in obs_mask[self.id]]
-        print(obs)
+        #print(obs)
         lower = {}
         upper = {}
         for e in obs:

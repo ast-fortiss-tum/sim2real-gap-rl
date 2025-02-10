@@ -140,8 +140,7 @@ class ContGaussianPolicy(nn.Module):
         # Enforcing action bounds
         log_prob -= torch.log(1 - action ** 2 + 1e-6)
         log_prob = log_prob.sum(-1, keepdim=True)
-        return (action * self.action_low).clamp_(self.action_low, self.action_high), log_prob, (mus * self.action_low).clamp_(self.action_low, self.action_high)
-
+        return (action * self.action_low).clamp_(self.action_low, self.action_high).float(), log_prob, (mus * self.action_low).clamp_(self.action_low, self.action_high).float()
 
     def to(self, *args, **kwargs):
         device = args[0]

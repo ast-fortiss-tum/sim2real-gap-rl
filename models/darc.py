@@ -134,8 +134,10 @@ class DARC(ContSAC):
                 if i % self.n_games_til_train == 0:
                     for _ in range(source_step * self.n_updates_per_train):
                         self.total_train_steps += 1
+
                         s_s, s_a, s_r, s_s_, s_d = self.source_memory.sample()
                         t_s, t_a, t_r, t_s_, t_d = self.target_memory.sample()
+        
                         train_info = self.train_step(s_s, s_a, s_r, s_s_, s_d, t_s, t_a, t_r, t_s_, t_d, i)
                         self.writer.add_train_step_info(train_info, i)
                     self.writer.write_train_step()
@@ -170,6 +172,7 @@ class DARC(ContSAC):
             next_state, reward, done, _, _ = env.step(action)
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
+
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else float(not done)
             if n_steps == self.max_steps:
                 done = True

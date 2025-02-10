@@ -11,7 +11,6 @@ class ContQNet(nn.Module):
     def forward(self, states, actions):
         return self.model(torch.cat([states, actions], 1))
 
-
 class DiscreteQNet(nn.Module):
     def __init__(self, model_config):
         super().__init__()

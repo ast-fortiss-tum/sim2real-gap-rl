@@ -1,11 +1,6 @@
-import gym
+from __future__ import absolute_import, division, print_function
 import pathlib
 from datetime import timedelta, datetime
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import time
 import numpy as np
@@ -13,11 +8,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-import gym
-#import gymnasium as gym
+import gymnasium as gym
 
 import pathlib
-#import wandb
 import matplotlib.pyplot as plt
 from functools import partial
 from commonpower.modelling import ModelHistory
@@ -25,10 +18,10 @@ from commonpower.core import System, Node, Bus
 from commonpower.models.busses import *
 from commonpower.models.components import *
 from commonpower.models.powerflow import *
-from commonpower.control.controllers import RLControllerSB3, OptimalController
+from commonpower.control.controllers import RLControllerSB3, OptimalController, RLBaseController
 from commonpower.control.safety_layer.safety_layers import ActionProjectionSafetyLayer
 from commonpower.control.safety_layer.penalties import *
-from commonpower.control.runners import SingleAgentTrainer, DeploymentRunner
+from commonpower.control.runners import BaseTrainer
 from commonpower.control.wrappers import SingleAgentWrapper
 from commonpower.control.logging.loggers import *
 from commonpower.control.configs.algorithms import *
@@ -36,15 +29,20 @@ from commonpower.data_forecasting import *
 from commonpower.utils.helpers import get_adjusted_cost
 from commonpower.utils.param_initialization import *
 from commonpower.control.environments import ControlEnv   
-from commonpower.control.controllers import RLBaseController
 
-class SmartGridBasic(gym.Wrapper):
+# Make sure you have imported or defined the following:
+# CSVDataSource, DataProvider, LookBackForecaster, PerfectKnowledgeForecaster,
+# TradingBusLinear, ESSLinear, ESS (for the nonlinear case),
+# RenewableGen, Load, PowerBalanceModel, ConstantInitializer
+
+class SmartGridBasic:
     def __init__(self,
                  horizon=timedelta(hours=24),
                  frequency=timedelta(minutes=60),
                  fixed_start="27.11.2016",
                  capacity=3,
-                 data_path=None):
+                 data_path=None,
+                 params_battery=None):
         """
         Initializes the SmartGrid environment with configurable parameters.
         
@@ -55,12 +53,14 @@ class SmartGridBasic(gym.Wrapper):
             capacity (float): The energy storage capacity (e.g., in kWh).
             data_path (str or pathlib.Path): Optional path to the data directory. 
                 If None, a default path is constructed.
+            params_battery (dict): A dictionary of battery parameters.
         """
         # Set basic parameters.
         self.horizon = horizon
         self.frequency = frequency
         self.fixed_start = fixed_start
         self.capacity = capacity
+        self.params_battery = params_battery
 
         # Determine the data path.
         if data_path is None:
@@ -112,8 +112,9 @@ class SmartGridBasic(gym.Wrapper):
         )
         self.opt_controller = OptimalController("opt_ctrl")
 
+        # Call setup methods.
         self.setup_system()
-        self.runner_setup()
+        self.trainer_setup()
 
     def setup_system(self):
         # --- Define Nodes ---
@@ -145,20 +146,20 @@ class SmartGridBasic(gym.Wrapper):
         # (Optional) Print the system structure.
         self.sys.pprint()
 
-    def runner_setup(self):
-        # --- Setup the Training Runner ---
-        self.runner = SingleAgentTrainer(
+    def trainer_setup(self):
+        # --- Setup the Trainer ---
+        self.trainer = BaseTrainer(
             sys=self.sys,
             global_controller=self.agent1,
             wrapper=SingleAgentWrapper,
             forecast_horizon=self.horizon,
             control_horizon=self.horizon,
         )
-        self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
-        self.runner.prepare_run()
+        self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+        self.trainer.prepare_run()
 
         # Save the created environment for later use.
-        self.env = self.runner.env
+        self.env = self.trainer.env
 
     def define_e1(self):
         """
@@ -173,56 +174,81 @@ class SmartGridBasic(gym.Wrapper):
 # =============================================================================
 class SmartGrid_Linear(SmartGridBasic):
     def __init__(self, **kwargs):
-        """
-        Initializes the SmartGridLinear environment. All parameters from the base class
-        (horizon, frequency, fixed_start, capacity, data_path) can be passed as keyword arguments.
-        """
+        # Ensure battery parameters are provided.
+        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
+            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_Linear.")
+        # Set battery-specific attributes before calling the base class constructor.
+        self.params_battery = kwargs["params_battery"]
+        self.rho = self.params_battery["rho"]      # wear cost per kWh
+        self.p_lim = self.params_battery["p_lim"]    # power limits
+        
+        # Now call the base class constructor.
         super().__init__(**kwargs)
 
     def define_e1(self):
-        # Here, only the parameters for the ESS differ.
+        # Define the energy storage system (ESS) for the linear case.
         return ESSLinear("ESS1", {
-            'rho': 0.1,
-            'p': (-1.5, 1.5),
+            'rho': self.rho,
+            'p': (-self.p_lim, self.p_lim),
             'q': (0, 0),
-            'soc': (0.2 * self.capacity, 0.8 * self.capacity),
-            "soc_init": RangeInitializer(0.2 * self.capacity, 0.8 * self.capacity)
+            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
+            "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
-
 
 # =============================================================================
 # Subclass for a nonlinear energy storage system.
 # =============================================================================
 class SmartGrid_Nonlinear(SmartGridBasic):
     def __init__(self, **kwargs):
+        # Ensure battery parameters are provided.
+        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
+            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_Nonlinear.")
+        # Set battery-specific attributes before calling the base class constructor.
+        self.params_battery = kwargs["params_battery"]
+        self.rho = self.params_battery["rho"]      # wear cost per kWh
+        self.p_lim = self.params_battery["p_lim"]    # power limits
+        self.etac = self.params_battery["etac"]      # charging efficiency
+        self.etad = self.params_battery["etad"]      # discharging efficiency
+        self.etas = self.params_battery["etas"]      # self-discharge
         super().__init__(**kwargs)
 
     def define_e1(self):
+        # Define the energy storage system (ESS) for the nonlinear case.
         return ESS("ESS", {
-            'rho': 0.001,  # charging/discharging 1 kWh incurs a cost of wear of 0.001
-            'p': (-2, 2),  # active power limits
-            'q': (0, 0),  # reactive power limits
-            'etac': 0.98,  # charging efficiency
-            'etad': 0.98,  # discharging efficiency
-            'etas': 0.99,  # self-discharge (after one time step 99% of the soc is left)
-            'soc': (0.1 * self.capacity, 0.9 * self.capacity),  # soc limits
-            "soc_init": ConstantInitializer(0.2 * self.capacity)  # initial soc at the start of simulation
+            'rho': self.rho,
+            'p': (-self.p_lim, self.p_lim),
+            'q': (0, 0),
+            'etac': self.etac,
+            'etad': self.etad,
+            'etas': self.etas,
+            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
+            "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
+
 
 # =============================================================================
 # Usage Examples:
 # =============================================================================
 """
-# Instantiate the linear smart grid with default parameters.
-smartgrid_env_linear = SmartGrid_Linear().env
+# Define battery parameters in a dictionary.
+battery_params = {
+    "rho": 0.1,
+    "p_lim": 1.5,
+    "etac": 0.95,
+    "etad": 0.95,
+    "etas": 0.99
+}
 
-# Or, instantiate with custom parameters (e.g., a different horizon, start date, capacity, or data path):
+# Instantiate the linear smart grid with default parameters.
+smartgrid_env_linear = SmartGrid_Linear(params_battery=battery_params).env
+
+# Or, instantiate with custom parameters:
 smartgrid_env_linear_custom = SmartGrid_Linear(
     horizon=timedelta(hours=12),
     frequency=timedelta(minutes=30),
     fixed_start="01.01.2020",
     capacity=5,
-    data_path="/path/to/your/data"
+    data_path="/path/to/your/data",
+    params_battery=battery_params
 ).env
 """
-
