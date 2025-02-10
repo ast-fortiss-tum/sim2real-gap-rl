@@ -134,7 +134,7 @@ class ContSAC:
                 else:
                     action = self.get_action(state, deterministic)
 
-                next_state, reward, done, _ = self.env.step(action)
+                next_state, reward, done, _ , _= self.env.step(action)
                 next_state = self.running_mean(next_state)
                 done_mask = 1.0 if n_steps == self.env._max_episode_steps - 1 else float(not done)
 
@@ -170,7 +170,7 @@ class ContSAC:
             total_reward = 0
             while not done:
                 action = self.get_action(state, deterministic=True)
-                next_state, reward, done, _ = self.env.step(action)
+                next_state, reward, done, _ , _= self.env.step(action)
                 next_state = self.running_mean(next_state)
                 total_reward += reward
                 state = next_state

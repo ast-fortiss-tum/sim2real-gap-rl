@@ -1,13 +1,15 @@
 import gym
 # import gymnasium as gym
 
+import datetime
 from models.darc import DARC
 from models.sac import ContSAC
 from environments.broken_joint import BrokenJointEnv,BrokenJointEnv2
 from utils import *
-from envs import *
+#from envs import *
 from datetime import datetime
-from zfilter import *
+from utils import *
+import argparse
 
 
 parser = argparse.ArgumentParser()
@@ -18,7 +20,7 @@ parser.add_argument('--train-steps', type=int, default=4000,
                     help='name of Mujoco environement')
 parser.add_argument('--max-steps', type=int, default=1000,
                     help='name of Mujoco environement')
-parser.add_argument('--save-file-name', type=str, default='',
+parser.add_argument('--save_file_name', type=str, default='',
                     help='name of Mujoco environement')
 parser.add_argument('--lr', type=float, default=1e-4,
                     help='name of Mujoco environement')
@@ -74,7 +76,7 @@ degree = args.degree
 save_model_path = args.save_model
 train_steps = args.train_steps
 
-currentDateAndTime = datetime.now()
+currentDateAndTime = datetime.datetime.now()
 date = currentDateAndTime.strftime("%Y:%M:%D").split(':')[-1]
 save_model_path += args.save_file_name
 save_model_path += '_'
@@ -153,7 +155,7 @@ sas_config = {
 }
 
 running_state = ZFilter((state_dim,), clip=20)
-model = DARC(policy_config, value_config, sa_config, sas_config, source_env, target_env, "cuda", ent_adj=True,\
+model = DARC(policy_config, value_config, sa_config, sas_config, source_env, target_env, "cpu", ent_adj=True,\
              n_updates_per_train=args.update,lr=args.lr,\
              max_steps=args.max_steps,batch_size=args.bs,\
              savefolder=save_model_path,running_mean=running_state,if_normalize = args.normalize, delta_r_scale = args.deltar,noise_scale = args.noise, warmup_games = args.warmup)

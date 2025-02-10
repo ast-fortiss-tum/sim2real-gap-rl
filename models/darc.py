@@ -139,7 +139,7 @@ class DARC(ContSAC):
                         train_info = self.train_step(s_s, s_a, s_r, s_s_, s_d, t_s, t_a, t_r, t_s_, t_d, i)
                         self.writer.add_train_step_info(train_info, i)
                     self.writer.write_train_step()
-                if i %100 == 0:
+                if i % 100 == 0:
                     print('src',self.eval_src(10))
                     print('tgt',self.eval_tgt(10))
                     self.save_model(str(i))
@@ -160,13 +160,14 @@ class DARC(ContSAC):
         done = False
         state = env.reset()
         if self.if_normalize:
-            state = self.running_mean(state)
+            #print(state[0])
+            state = self.running_mean(state[0])
         while not done:
             if game_count <= self.warmup_games:
                 action = env.action_space.sample()
             else:
                 action = self.get_action(state, deterministic)
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _, _ = env.step(action)
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else float(not done)
@@ -217,7 +218,7 @@ class DARC(ContSAC):
         for i in range(num_games):
             state = self.source_env.reset()
             if self.if_normalize:
-                state = self.running_mean(state)
+                state = self.running_mean(state[0])
             done = False
             total_reward = 0
             step = 0
@@ -225,7 +226,7 @@ class DARC(ContSAC):
                 if render:
                     self.env.render()
                 action = self.get_action(state, deterministic=False)
-                next_state, reward, done, _ = self.source_env.step(action)
+                next_state, reward, done, _ , _ = self.source_env.step(action)
                 if self.if_normalize:
                     next_state = self.running_mean(next_state)
                 total_reward += reward
@@ -245,14 +246,14 @@ class DARC(ContSAC):
             step = 0
             state = self.target_env.reset()
             if self.if_normalize:
-                state = self.running_mean(state)
+                state = self.running_mean(state[0])
             done = False
             total_reward = 0
             while not done:
                 if render:
                     self.env.render()
                 action = self.get_action(state, deterministic=False)
-                next_state, reward, done, _ = self.target_env.step(action)
+                next_state, reward, done, _ , _ = self.target_env.step(action)
                 if self.if_normalize:
                     next_state = self.running_mean(next_state)
                 total_reward += reward
