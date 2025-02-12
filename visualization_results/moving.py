@@ -281,7 +281,7 @@ def main(window_size=100):
     param_data = load_data(parameter_json_file)
     going_data = load_data(going_json_file)
 
-    cte_threshold = 2.0
+    cte_threshold = 1.5
     speed_threshold = 10.0
 
     perc = calculate_cte_below_percentage(param_data, going_data, cte_threshold=cte_threshold, speed_threshold=speed_threshold)

@@ -3,6 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import argparse
+import ast
+from matplotlib.path import Path  # for point-in-polygon testing
+from matplotlib.collections import LineCollection  # for multi-colored trace segments
+import matplotlib.lines as mlines  # for custom legend handles
 
 def load_data(file_path):
     """Load JSON data from file."""
@@ -13,17 +17,17 @@ def plot_lanes(ax, lanes):
     """
     Plot the lanes on the provided Axes.
     
-    Each lane is a list of points in the format [x, y].  
-    - Lane 0 and Lane 1: white solid lines  
-    - Lane 2: yellow dashed line  
-    - Other lanes: default styling
+    Each lane is a list of points [x, y].  
+      - Lane 0 and Lane 1 are drawn as white solid lines  
+      - Lane 2 is drawn as a yellow dashed line  
+      - Other lanes use default styling  
+    (No labels are added for lanes.)
     """
     for lane_index, lane in enumerate(lanes):
         if not isinstance(lane, list):
             print(f"Lane {lane_index} is not a list.")
             continue
         
-        # Collect x and y coordinates (assuming each point is a list [x, y])
         x_coords = []
         y_coords = []
         for point in lane:
@@ -37,8 +41,7 @@ def plot_lanes(ax, lanes):
             print(f"Lane {lane_index} has no valid points.")
             continue
         
-        # Set custom style based on lane index.
-        if lane_index == 0 or lane_index == 1:
+        if lane_index in [0, 1]:
             color = 'white'
             linestyle = '-'  # solid line
         elif lane_index == 2:
@@ -48,162 +51,275 @@ def plot_lanes(ax, lanes):
             color = None  # Let matplotlib choose
             linestyle = '-'
         
-        ax.plot(x_coords, y_coords, color=color, linestyle=linestyle, label=f"Lane {lane_index}")
+        ax.plot(x_coords, y_coords, color=color, linestyle=linestyle)
 
-def interpolate_poses(poses, steps_per_segment=10):
+def is_inside_lane_area(point, lane0, lane1):
     """
-    Given a list of poses (each pose is a list [x, y]), create an interpolated
-    list of poses that smooths the transition between consecutive points.
-    
-    steps_per_segment: number of frames to generate between each consecutive pair.
+    Check if the given point [x, y] is inside the polygon formed by lane0 and lane1.
+    The polygon is constructed by concatenating lane0 with lane1 reversed.
+    """
+    polygon = lane0 + lane1[::-1]
+    path = Path(polygon)
+    return path.contains_point(point)
+
+def interpolate_poses_with_time(poses, times, steps_per_segment=10):
+    """
+    Given a list of poses ([x, y]) and their corresponding times,
+    return a list of interpolated tuples (x, y, t).
     """
     if len(poses) < 2:
-        return poses
-
+        return [(poses[0][0], poses[0][1], times[0])]
+    
     interpolated = []
     for i in range(len(poses) - 1):
         p0 = poses[i]
         p1 = poses[i+1]
-        # Generate intermediate frames (excluding the endpoint to avoid duplicates)
-        for t in np.linspace(0, 1, steps_per_segment, endpoint=False):
-            x = p0[0] + t * (p1[0] - p0[0])
-            y = p0[1] + t * (p1[1] - p0[1])
-            interpolated.append([x, y])
-    # Append the final pose
-    interpolated.append(poses[-1])
+        t0 = times[i]
+        t1 = times[i+1]
+        for t_frac in np.linspace(0, 1, steps_per_segment, endpoint=False):
+            x = p0[0] + t_frac * (p1[0] - p0[0])
+            y = p0[1] + t_frac * (p1[1] - p0[1])
+            t_interp = t0 + t_frac * (t1 - t0)
+            interpolated.append((x, y, t_interp))
+    interpolated.append((poses[-1][0], poses[-1][1], times[-1]))
     return interpolated
 
-def animate_pose(ax, poses, interval=200, steps_per_segment=10, subsample = 100):
+def get_going_flag(current_time, going_times, going_flags):
     """
-    Create an animation on the given Axes with the pose data.
+    Given the current_time and the list of times and corresponding going flags,
+    return the flag for the interval in which current_time falls.
     
-    The pose is assumed to be a list of [x, y] pairs.  
-    Only every 100th point is used, and interpolation is applied between
-    points for smooth transitions.
-    
-    A red point (marker) is animated, and a trace (line) is drawn showing
-    all previous positions.
+    Assumes that going_times is sorted in ascending order.
     """
-    # Subsample the poses to use every 100th point.
+    idx = np.searchsorted(going_times, current_time, side='right') - 1
+    if idx < 0:
+        return going_flags[0]
+    elif idx >= len(going_flags):
+        return going_flags[-1]
+    return going_flags[idx]
+
+def animate_pose(ax, poses, times, lanes, going_times, going_flags,
+                 metrics_times, metrics_cte, metrics_speed,
+                 interval=200, steps_per_segment=10, subsample=1):
+    """
+    Create an animation on ax using pose data (with time) and display in real time:
+      - The animated marker (colored based on on-track/off-track/external intervention)
+      - The trace of past positions (segments colored accordingly)
+      - The actual metric values (cte and speed) corresponding to the current animation time.
+      
+    Additionally, when the animation reaches the final frame, it computes and displays
+    the "Porcentage on-track" (using samples where going is True).
+    The animation stops at the final frame.
+    """
+    # Subsample the original data if desired.
     poses = poses[::subsample]
-    # Interpolate between the subsampled poses for smooth transitions.
-    poses = interpolate_poses(poses, steps_per_segment=steps_per_segment)
-
-    # Create the animated point (red circle) with a large marker size.
-    point, = ax.plot([], [], 'ro', markersize=12)
-    # Create a line object for the trace (using a red line).
-    trace_line, = ax.plot([], [], 'r--', linewidth=1.5, alpha=0.6)
-
-    # Lists to store the trace points.
-    trace_x = []
-    trace_y = []
+    times = times[::subsample]
+    # Interpolate (x, y, t) between original points.
+    interp_poses = interpolate_poses_with_time(poses, times, steps_per_segment=steps_per_segment)
+    
+    # Create the animated marker.
+    point, = ax.plot([], [], 'o', markersize=12)
+    # Create a LineCollection for the trace.
+    trace_collection = LineCollection([], linestyle='--', linewidth=1.5, alpha=0.6)
+    ax.add_collection(trace_collection)
+    
+    # Create a text object for percentage display.
+    percentage_text = ax.text(0.05, 0.95, '', transform=ax.transAxes,
+                              fontsize=14, color='blue', verticalalignment='top')
+    # Create a text object for real-time metrics display.
+    metrics_text = ax.text(0.05, 0.90, '', transform=ax.transAxes,
+                           fontsize=14, color='purple', verticalalignment='top')
+    
+    # List to store trace points.
+    # Each element is a tuple: (x, y, t, on_track, going_flag)
+    trace_points = []
     
     def init():
         point.set_data([], [])
-        trace_line.set_data([], [])
-        return point, trace_line
-
+        trace_collection.set_segments([])
+        percentage_text.set_text('')
+        metrics_text.set_text('')
+        return point, trace_collection, percentage_text, metrics_text
+    
     def update(frame):
-        x, y = poses[frame]
-        # Append the new point to the trace.
-        trace_x.append(x)
-        trace_y.append(y)
-        # Update the animated point's location.
+        x, y, t = interp_poses[frame]
+        # Determine if the current pose is "on track."
+        on_track = is_inside_lane_area([x, y], lanes[0], lanes[1])
+        # Get the current "going" flag.
+        current_going = get_going_flag(t, going_times, going_flags)
+        
+        # Set marker color.
+        if not current_going:
+            point_color = 'black'
+        else:
+            point_color = 'green' if on_track else 'red'
         point.set_data(x, y)
-        # Update the trace line data.
-        trace_line.set_data(trace_x, trace_y)
-        return point, trace_line
-
+        point.set_color(point_color)
+        
+        # Append the current sample.
+        trace_points.append((x, y, t, on_track, current_going))
+        
+        # Build trace segments.
+        segments = []
+        colors = []
+        if len(trace_points) > 1:
+            for i in range(len(trace_points) - 1):
+                p1 = trace_points[i]
+                p2 = trace_points[i+1]
+                seg = [[p1[0], p1[1]], [p2[0], p2[1]]]
+                segments.append(seg)
+                if not p1[4]:
+                    seg_color = 'black'
+                else:
+                    seg_color = 'green' if (p1[3] and p2[3]) else 'red'
+                colors.append(seg_color)
+        trace_collection.set_segments(segments)
+        trace_collection.set_color(colors)
+        
+        # --- Compute the actual metric values (no moving average) ---
+        # Find the index of the metric sample with time closest to (but not greater than) t.
+        idx = np.searchsorted(metrics_times, t, side='right') - 1
+        if idx < 0:
+            metrics_text.set_text("CTE: N/A, Speed: N/A")
+        else:
+            current_cte = metrics_cte[idx]
+            current_speed = metrics_speed[idx]
+            metrics_text.set_text(f"CTE: {current_cte:.2f}, Speed: {current_speed:.2f}")
+        # --- End metric computation ---
+        
+        # When on the final frame, compute and display the percentage on-track.
+        if frame == len(interp_poses) - 1:
+            valid_points = [pt for pt in trace_points if pt[4]]
+            if valid_points:
+                count_green = sum(1 for pt in valid_points if pt[3])
+                percentage = (count_green / len(valid_points)) * 100
+            else:
+                percentage = 0.0
+            percentage_text.set_text(f"Porcentage on-track: {percentage:.1f}%")
+        
+        return point, trace_collection, percentage_text, metrics_text
+    
+    # Set repeat=False so the animation stops at the final frame.
     ani = animation.FuncAnimation(
         ax.figure,
         update,
-        frames=range(len(poses)),
+        frames=range(len(interp_poses)),
         init_func=init,
         blit=True,
-        interval=interval
+        interval=interval,
+        repeat=False
     )
     return ani
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Animation with lane coloring, selective black segments (external intervention), "
+                    "and real-time metric values (cte and speed) display."
+    )
 
-    # Create an ArgumentParser object.
-    parser = argparse.ArgumentParser(description="Example: Select a file using a command-line flag.")
-    
-    # Define the --file flag that requires a file path.
-    parser.add_argument('--name', type=str, required=True, help="Name of experiments file.")
-    
-    # Parse the command-line arguments.
+     # File with lanes, poses, and pose time stamps.
+    parser.add_argument('--name', type=str, required=True,
+                        help="Name of experiments file for poses and lanes (without extension).")
+
     args = parser.parse_args()
-    
-    # Access the file path provided by the user.
     name = args.name
-
-    print("Selected file:", name)
-
-    # Replace these file paths with your actual JSON file paths.
-    file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_poses.json'
-
-    # Load the JSON data.
-    data = load_data(file_path)
     
-    # Get lanes and pose from the JSON.
+    # Load the poses JSON file.
+    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_poses.json'
+    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_moving.json'
+    metrics_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_ctes.json'
+
+
+    data = load_data(poses_file_path)
+    
     lanes = data.get("lanes")
     poses = data.get("pose")
-    
+    poses_time = data.get("time")
+
     if lanes is None:
-        print("The JSON file does not contain a 'lanes' key.")
+        print("The poses JSON does not contain a 'lanes' key.")
         return
     if poses is None:
-        print("The JSON file does not contain a 'pose' key.")
+        print("The poses JSON does not contain a 'pose' key.")
         return
+    if poses_time is None:
+        print("The poses JSON does not contain a 'time' key.")
+        return
+    if isinstance(poses_time, str):
+        poses_time = ast.literal_eval(poses_time)
     
-    # Create a figure and axis.
+    # Load the going JSON file.
+    going_data = load_data(going_file_path)
+    going_list = going_data.get("going")
+    going_times = going_data.get("time")
+    if going_list is None or going_times is None:
+        print("The going JSON must contain 'going' and 'time' keys.")
+        return
+    if isinstance(going_list, str):
+        going_list = ast.literal_eval(going_list)
+    if isinstance(going_times, str):
+        going_times = ast.literal_eval(going_times)
+    
+    # Load the metrics JSON file.
+    metrics_data = load_data(metrics_file_path)
+    metrics_cte = metrics_data.get("cte")
+    metrics_speed = metrics_data.get("speed")
+    metrics_times = metrics_data.get("time")
+    if metrics_cte is None or metrics_speed is None or metrics_times is None:
+        print("The metrics JSON must contain 'cte', 'speed', and 'time' keys.")
+        return
+    if isinstance(metrics_cte, str):
+        metrics_cte = ast.literal_eval(metrics_cte)
+    if isinstance(metrics_speed, str):
+        metrics_speed = ast.literal_eval(metrics_speed)
+    if isinstance(metrics_times, str):
+        metrics_times = ast.literal_eval(metrics_times)
+    
+    # Create the figure and axis.
     fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Set a background color so white lines are visible.
     ax.set_facecolor('grey')
-    
-    # Plot lanes.
     plot_lanes(ax, lanes)
     
-    # Gather all x and y coordinates from lanes and pose for proper limits.
+    # Set axis limits based on lanes and pose data.
     all_x = []
     all_y = []
     for lane in lanes:
         if isinstance(lane, list):
-            for point in lane:
+            for pt in lane:
                 try:
-                    all_x.append(point[0])
-                    all_y.append(point[1])
-                except (TypeError, IndexError):
+                    all_x.append(pt[0])
+                    all_y.append(pt[1])
+                except:
                     continue
-    # Also include pose data.
-    for point in poses:
+    for pt in poses:
         try:
-            all_x.append(point[0])
-            all_y.append(point[1])
-        except (TypeError, IndexError):
+            all_x.append(pt[0])
+            all_y.append(pt[1])
+        except:
             continue
-
     if all_x and all_y:
         margin = 1
         ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
         ax.set_ylim(min(all_y) - margin, max(all_y) + margin)
     
-    # Label the axes and add a title.
     ax.set_xlabel("X Coordinate")
     ax.set_ylabel("Y Coordinate")
-    ax.set_title("Lanes and Pose Animation")
-    ax.legend()
+    ax.set_title("Lanes and Pose Animation with Going Intervals and Metrics")
     ax.grid(True)
     
-    # Create the pose animation.
-    ani = animate_pose(ax, poses, interval=100, steps_per_segment=10, subsample=100)
+    # Create a custom legend for the trace segments.
+    on_track_line = mlines.Line2D([], [], color='green', linestyle='--', label='on-track')
+    off_track_line = mlines.Line2D([], [], color='red', linestyle='--', label='off-track')
+    external_line = mlines.Line2D([], [], color='black', linestyle='--', label='External intervention')
+    ax.legend(handles=[on_track_line, off_track_line, external_line], loc='upper right')
     
-    # Ensure a tight layout and display the plot.
+    # Create the animation.
+    ani = animate_pose(ax, poses, poses_time, lanes, going_times, going_list,
+                       metrics_times, metrics_cte, metrics_speed,
+                       interval=50, steps_per_segment=10, subsample=50)
+    
     plt.tight_layout()
     plt.show()
 
 if __name__ == '__main__':
-    # Replace with the path to your JSON file.
     main()
