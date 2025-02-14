@@ -13,7 +13,7 @@ from datetime import datetime
 from utils import *
 import argparse
 from commonpower.control.runners import SingleAgentTrainer, DeploymentRunner
-from stable_baselines3 import SAC
+from stable_baselines3 import SAC, PPO
 
 
 parser = argparse.ArgumentParser()
@@ -70,23 +70,28 @@ save_model_path += '_'
 
 save_model_path += str(env_name)
 
-source_env = SmartGrid_Linear(
+source_grid = SmartGrid_Linear(
+    rl = True,
     horizon=timedelta(hours=24),
     frequency=timedelta(minutes=60),
     fixed_start="27.11.2016",
     capacity=3,
     data_path="./data/1-LV-rural2--1-sw",
     params_battery={"rho": 0.1, "p_lim": 2.0}
-).env
+)
 
-target_env = SmartGrid_Nonlinear(
+target_grid = SmartGrid_Nonlinear(
+    rl = True,
     horizon=timedelta(hours=24),
     frequency=timedelta(minutes=60),
     fixed_start="27.11.2016",
     capacity=3,
     data_path="./data/1-LV-rural2--1-sw",
     params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.6, "etad": 0.7, "etas": 0.8}
-).env
+)
+
+source_env = source_grid.env
+target_env = target_grid.env
 
 source_env._max_episode_steps = 24
 target_env._max_episode_steps = 24
@@ -128,6 +133,7 @@ sas_config = {
 }
 
 running_state = ZFilter((state_dim,), clip=2)
+
 model = DARC(policy_config, value_config, sa_config, sas_config, source_env, target_env, "cpu", ent_adj=True,\
              n_updates_per_train=args.update,lr=args.lr,\
              max_steps=args.max_steps,batch_size=args.bs,\
@@ -139,68 +145,84 @@ model = DARC(policy_config, value_config, sa_config, sas_config, source_env, tar
 
 
 #############################################################################################
-from stable_baselines3.common.policies import ActorCriticPolicy
 
-class CustomContGaussianPolicy(ActorCriticPolicy):
+from stable_baselines3.sac.policies import SACPolicy
+
+# Now, create a custom SAC policy that uses your network.
+class CustomContGaussianPolicy(SACPolicy):
     def __init__(self, observation_space, action_space, lr_schedule, model_config, action_range, **kwargs):
-        super(CustomContGaussianPolicy, self).__init__(
-            observation_space,
-            action_space,
-            lr_schedule,
-            **kwargs
-        )
-        self.net = ContGaussianPolicy(model_config, action_range)
+        self.model_config = model_config
+        self.action_range = action_range
+        # The following call will in turn call _build()
+        super(CustomContGaussianPolicy, self).__init__(observation_space, action_space, lr_schedule, **kwargs)
 
-    def forward(self, obs, deterministic=False):
-        # Here we simply call your network. You can also implement SDE logic if needed.
-        mu, log_std = self.net(obs, transform=False)
-        # The parent policy might require returning the distribution parameters, so adjust as necessary.
-        return mu, log_std
+    def _build(self, lr_schedule):
+        # Instead of using the default network builder,
+        # assign our custom actor network.
+        self.actor = ContGaussianPolicy(self.model_config, self.action_range)
+        
+        # For the critic, you can either build a standard one or create a minimal one.
+        # Here we use a simple MLP critic using SB3's helper.
+        # The critic expects a network mapping from observation and action to Q-value.
+        critic_kwargs = dict(net_arch=[256, 256])
+        self.critic = self.make_critic(self.observation_space, self.action_space)
+        
+        # Create optimizers for actor and critic.
+        self.actor.optimizer = self.optimizer_class(self.actor.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        self.critic.optimizer = self.optimizer_class(self.critic.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        
+        # Create target critic networks.
+        self.critic_target = self.critic.copy()
+        self._update_target(1.0)
+    
+    def forward(self, obs, deterministic=False, use_sde=False, **kwargs):
+        # Forward pass: we call our actor network.
+        return self.actor(obs, transform=False, use_sde=use_sde, **kwargs)
 
     def _predict(self, obs, deterministic=False):
-        # Use your network to sample an action
-        action, _, _ = self.net.sample(obs, transform=False)
+        # Use the actor's sample method for action prediction.
+        action, _, _ = self.actor.sample(obs, transform=False)
         return action
 
+    # Optionally override other methods if needed.
+
+
 #ToDo: Add plot to see performance on differen days maybe?? compare against the baseline MPC
+model_path = "/home/cubos98/Desktop/MA/DARAIL/saved_weights/_02/SmartGrids/25_0.0001_Smart_Grids/200/policy/policy.zip"
+
+target_grid_mpc = SmartGrid_Nonlinear(
+    rl = False,
+    horizon=timedelta(hours=24),
+    frequency=timedelta(minutes=60),
+    fixed_start="27.11.2016",
+    capacity=3,
+    data_path="./data/1-LV-rural2--1-sw",
+    params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.6, "etad": 0.7, "etas": 0.8}
+)
+
+agent2 = RLControllerSB3(
+    name="pretrained_agent", 
+    safety_layer=ActionProjectionSafetyLayer(penalty=DistanceDependingPenalty(penalty_factor=0.001)),
+    pretrained_policy_path=model_path
+)
+
+target_grid_trained = SmartGrid_Nonlinear(
+    rl = True,
+    policy_path=model_path,
+    horizon=timedelta(hours=24),
+    frequency=timedelta(minutes=60),
+    fixed_start="27.11.2016",
+    capacity=3,
+    data_path="./data/1-LV-rural2--1-sw",
+    params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.6, "etad": 0.7, "etas": 0.8}
+)
+
 env = model.env
 action_range = (env.action_space.low, env.action_space.high)
-lr_schedule = lambda _: 0.0001
-
-policy_DARC = CustomContGaussianPolicy(
-    observation_space=env.observation_space,
-    action_space=env.action_space,
-    lr_schedule=lr_schedule,
-    model_config=policy_config,
-    action_range=action_range
-    )
-
-#policy_kwargs = dict(
-#        features_extractor_class=ContGaussianPolicy(policy_config, action_range),
-#    )
-
-model = SAC(
-    #policy="MlpPolicy",  # or "CnnPolicy" if you want the built-in CNN
-    policy=policy_DARC,
-    env=target_env,
-    learning_rate=1e-4,
-    buffer_size=100,
-    learning_starts=24,
-    batch_size=256,
-    tau=0.02,
-    gamma=0.99,
-    train_freq=1,
-    gradient_steps=1,
-    ent_coef=0.25,
-    target_update_interval=1,
-    #policy_kwargs=policy_kwargs,
-    verbose=1,
-    seed=42,
-    device="auto",
-    tensorboard_log="./log_tryout/")
 
 #model = SAC(ContGaussianPolicy, target_env, verbose=1)
-state_dict = torch.load("./saved_weights/_02/100/policy")  #.pth
+model_path = "/home/cubos98/Desktop/MA/DARAIL/saved_weights/_02/SmartGrids/25_0.0001_Smart_Grids/100/policy.pth"
+state_dict = torch.load(model_path, weights_only=True)  #.pth
 
 # If your file was saved as a dictionary containing a key like "state_dict",
 # then extract it. Otherwise, assume the file is directly the state dictionary.
@@ -209,14 +231,29 @@ if isinstance(state_dict, dict) and "state_dict" in state_dict:
 
 # Load the state dictionary into the policy network.
 model.policy.load_state_dict(state_dict, strict=False)
-model_path = "./saved_weights/_02/100/SB3/SAC_myModel.zip"
-model.save(model_path)
+model.policy.eval()
+
+lr_schedule = lambda _: 0.0001
+
+agent = SAC(
+    policy=CustomContGaussianPolicy,
+    env=env,
+    verbose=1,
+    policy_kwargs=dict(
+        model_config=policy_config,
+        action_range=action_range
+    ),
+    learning_rate=lr_schedule,
+)
+
+#model = SAC()
+#model.save(model_path)
 
 # we use pydantic classes for configuration of algorithms
 alg_config = SB3MetaConfig(
     total_steps=550*24,
     seed=42,
-    algorithm=SAC,
+    algorithm=PPO,
     penalty_factor=0.001,
     algorithm_config=SB3PPOConfig(
         n_steps=24,
@@ -231,13 +268,14 @@ agent2 = RLControllerSB3(
     pretrained_policy_path=model_path
 )
 
-sys = target_env.sys 
+sys_trained = target_grid_trained.sys 
+sys_mpc = target_grid_mpc.sys
 
-oc_model_history = ModelHistory([sys])
-rl_model_history = ModelHistory([sys])
+oc_model_history = ModelHistory([sys_mpc])
+rl_model_history = ModelHistory([sys_trained])
 
 rl_deployer = DeploymentRunner(
-    sys=sys, 
+    sys=sys_trained, 
     global_controller=agent2,  
     alg_config=alg_config,
     wrapper=SingleAgentWrapper,
@@ -248,29 +286,39 @@ rl_deployer = DeploymentRunner(
 )
 
 oc_deployer = DeploymentRunner(
-    sys=sys, 
+    sys=sys_mpc, 
     global_controller=OptimalController('global'), 
     forecast_horizon=timedelta(hours=24),
     control_horizon=timedelta(hours=24),
     history=oc_model_history,
     seed=42
 )
-oc_deployer.run(n_steps=24, fixed_start="27.11.2016")
-# we retrieve logs for the system cost
-oc_power_import_cost = oc_model_history.get_history_for_element(target_env.m1, name='cost') # cost for buying electricity
-oc_dispatch_cost = oc_model_history.get_history_for_element(target_env.n1, name='cost') # cost for operating the components in the household
-oc_total_cost = [(oc_power_import_cost[t][0], oc_power_import_cost[t][1] + oc_dispatch_cost[t][1]) for t in range(len(oc_power_import_cost))]
-oc_soc = oc_model_history.get_history_for_element(target_env.e1, name="soc") # state of charge
 
-rl_power_import_cost = rl_model_history.get_history_for_element(target_env.m1, name='cost') # cost for buying electricity
-rl_dispatch_cost = rl_model_history.get_history_for_element(target_env.n1, name='cost') # cost for operating the components in the household
-rl_total_cost = [(rl_power_import_cost[t][0], rl_power_import_cost[t][1] + rl_dispatch_cost[t][1]) for t in range(len(rl_power_import_cost))]
-rl_soc = rl_model_history.get_history_for_element(target_env.e1, name="soc") # state of charge of the battery
+print(target_grid_trained.sys.controllers["agent1"].policy)
+print(agent2.policy)
+
+time.sleep(10)
+
+oc_deployer.run(n_steps=24, fixed_start="27.11.2016")
+rl_deployer.run(n_steps=24, fixed_start="27.11.2016")
+# we retrieve logs for the system cost
+oc_power_import_cost = oc_model_history.get_history_for_element(target_grid.m1, name='cost') # cost for buying electricity
+oc_dispatch_cost = oc_model_history.get_history_for_element(target_grid_mpc.n1, name='cost') # cost for operating the components in the household
+oc_total_cost = [(oc_power_import_cost[t][0], oc_power_import_cost[t][1] + oc_dispatch_cost[t][1]) for t in range(len(oc_power_import_cost))]
+oc_soc = oc_model_history.get_history_for_element(target_grid_mpc.e1, name="soc") # state of charge
+
+rl_power_import_cost = rl_model_history.get_history_for_element(target_grid_trained.m1, name='cost') # cost for buying electricity
+print(rl_power_import_cost)
+time.sleep(10)
+#rl_dispatch_cost = rl_model_history.get_history_for_element(target_grid_trained.n1, name='cost') # cost for operating the components in the household
+#rl_total_cost = [(rl_power_import_cost[t][0], rl_power_import_cost[t][1] + rl_dispatch_cost[t][1]) for t in range(len(rl_power_import_cost))]
+#print(rl_total_cost)
+#rl_soc = rl_model_history.get_history_for_element(target_grid_trained.e1, name="soc") # state of charge of the battery
 
 # plotting the cost of RL agent and optimal controller
-plt.plot(range(len(rl_total_cost)), [x[1] for x in rl_total_cost], label="Cost RL")
+#plt.plot(range(len(rl_total_cost)), [x[1] for x in rl_total_cost], label="Cost RL")
 plt.plot(range(len(oc_total_cost)), [x[1] for x in oc_total_cost], label="Cost optimal control")
-plt.xticks(ticks=range(len(rl_power_import_cost)), labels=[x[0] for x in rl_power_import_cost])
+plt.xticks(ticks=range(len(oc_power_import_cost)), labels=[x[0] for x in oc_power_import_cost])
 plt.xticks(rotation=45)
 plt.xlabel("Timestamp")
 plt.ylabel("Value")

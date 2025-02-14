@@ -127,79 +127,18 @@ sas_config = {
     "output_activation": "none"
 }
 
-running_state = ZFilter((state_dim,), clip=2)
-model = DARC(policy_config, value_config, sa_config, sas_config, source_env, target_env, "cpu", ent_adj=True,\
-             n_updates_per_train=args.update,lr=args.lr,\
-             max_steps=args.max_steps,batch_size=args.bs,\
-             savefolder=save_model_path,running_mean=running_state,if_normalize = args.normalize, delta_r_scale = args.deltar,noise_scale = args.noise, warmup_games = args.warmup)
+#running_state = ZFilter((state_dim,), clip=2)
+#model = DARC(policy_config, value_config, sa_config, sas_config, source_env, target_env, "cpu", ent_adj=True,\
+#             n_updates_per_train=args.update,lr=args.lr,\
+#             max_steps=args.max_steps,batch_size=args.bs,\
+#             savefolder=save_model_path,running_mean=running_state,if_normalize = args.normalize, delta_r_scale = args.deltar,noise_scale = args.noise, warmup_games = args.warmup)
 
 #model.train(train_steps, deterministic=False)  # posible change to trainer.run() .... implementing DARC as SAC in the commonpower framework to train with safety layer. 
 #model.save_model(save_model_path)           # Ignore safety layer for now !!!!!!!!!!!
 
-
-
-#############################################################################################
-from stable_baselines3.common.policies import ActorCriticPolicy
-
-class CustomContGaussianPolicy(ActorCriticPolicy):
-    def __init__(self, observation_space, action_space, lr_schedule, model_config, action_range, **kwargs):
-        super(CustomContGaussianPolicy, self).__init__(
-            observation_space,
-            action_space,
-            lr_schedule,
-            **kwargs
-        )
-        self.net = ContGaussianPolicy(model_config, action_range)
-
-    def forward(self, obs, deterministic=False):
-        # Here we simply call your network. You can also implement SDE logic if needed.
-        mu, log_std = self.net(obs, transform=False)
-        # The parent policy might require returning the distribution parameters, so adjust as necessary.
-        return mu, log_std
-
-    def _predict(self, obs, deterministic=False):
-        # Use your network to sample an action
-        action, _, _ = self.net.sample(obs, transform=False)
-        return action
-
 #ToDo: Add plot to see performance on differen days maybe?? compare against the baseline MPC
-env = model.env
-action_range = (env.action_space.low, env.action_space.high)
-lr_schedule = lambda _: 0.0001
 
-policy_DARC = CustomContGaussianPolicy(
-    observation_space=env.observation_space,
-    action_space=env.action_space,
-    lr_schedule=lr_schedule,
-    model_config=policy_config,
-    action_range=action_range
-    )
-
-#policy_kwargs = dict(
-#        features_extractor_class=ContGaussianPolicy(policy_config, action_range),
-#    )
-
-model = SAC(
-    #policy="MlpPolicy",  # or "CnnPolicy" if you want the built-in CNN
-    policy=policy_DARC,
-    env=target_env,
-    learning_rate=1e-4,
-    buffer_size=100,
-    learning_starts=24,
-    batch_size=256,
-    tau=0.02,
-    gamma=0.99,
-    train_freq=1,
-    gradient_steps=1,
-    ent_coef=0.25,
-    target_update_interval=1,
-    #policy_kwargs=policy_kwargs,
-    verbose=1,
-    seed=42,
-    device="auto",
-    tensorboard_log="./log_tryout/")
-
-#model = SAC(ContGaussianPolicy, target_env, verbose=1)
+model = SAC(ContGaussianPolicy, target_env, verbose=1)
 state_dict = torch.load("./saved_weights/_02/100/policy")  #.pth
 
 # If your file was saved as a dictionary containing a key like "state_dict",

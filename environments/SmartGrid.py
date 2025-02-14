@@ -21,7 +21,7 @@ from commonpower.models.powerflow import *
 from commonpower.control.controllers import RLControllerSB3, OptimalController, RLBaseController
 from commonpower.control.safety_layer.safety_layers import ActionProjectionSafetyLayer
 from commonpower.control.safety_layer.penalties import *
-from commonpower.control.runners import BaseTrainer
+from commonpower.control.runners import BaseTrainer, BaseRunner
 from commonpower.control.wrappers import SingleAgentWrapper
 from commonpower.control.logging.loggers import *
 from commonpower.control.configs.algorithms import *
@@ -30,13 +30,10 @@ from commonpower.utils.helpers import get_adjusted_cost
 from commonpower.utils.param_initialization import *
 from commonpower.control.environments import ControlEnv   
 
-# Make sure you have imported or defined the following:
-# CSVDataSource, DataProvider, LookBackForecaster, PerfectKnowledgeForecaster,
-# TradingBusLinear, ESSLinear, ESS (for the nonlinear case),
-# RenewableGen, Load, PowerBalanceModel, ConstantInitializer
-
 class SmartGridBasic:
     def __init__(self,
+                 rl = True,
+                 policy_path = None,
                  horizon=timedelta(hours=24),
                  frequency=timedelta(minutes=60),
                  fixed_start="27.11.2016",
@@ -56,6 +53,8 @@ class SmartGridBasic:
             params_battery (dict): A dictionary of battery parameters.
         """
         # Set basic parameters.
+        self.rl = rl
+
         self.horizon = horizon
         self.frequency = frequency
         self.fixed_start = fixed_start
@@ -109,12 +108,13 @@ class SmartGridBasic:
         self.agent1 = RLControllerSB3(
             name='agent1',
             safety_layer=ActionProjectionSafetyLayer(penalty=DistanceDependingPenalty(penalty_factor=0.001)),
+            pretrained_policy_path=policy_path
         )
         self.opt_controller = OptimalController("opt_ctrl")
 
         # Call setup methods.
         self.setup_system()
-        self.trainer_setup()
+        self.setup_runner_trainer(rl = self.rl)
 
     def setup_system(self):
         # --- Define Nodes ---
@@ -144,20 +144,32 @@ class SmartGridBasic:
         # (Optional) Print the system structure.
         self.sys.pprint()
 
-    def trainer_setup(self):
+    def setup_runner_trainer(self, rl = True):
         # --- Setup the Trainer ---
-        self.trainer = BaseTrainer(
-            sys=self.sys,
-            global_controller=self.agent1,
-            wrapper=SingleAgentWrapper,
-            forecast_horizon=self.horizon,
-            control_horizon=self.horizon,
-        )
-        self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
-        self.trainer.prepare_run()
+        if rl:
+            self.runner = None
+            self.trainer = BaseTrainer(
+                sys=self.sys,
+                global_controller=self.agent1,
+                wrapper=SingleAgentWrapper,
+                forecast_horizon=self.horizon,
+                control_horizon=self.horizon,
+            )
+            self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            self.trainer.prepare_run()
+            self.env = self.trainer.env
 
-        # Save the created environment for later use.
-        self.env = self.trainer.env
+        else:
+            self.trainer = False
+            self.runner = BaseRunner(
+                sys=self.sys,
+                global_controller=self.opt_controller,
+                forecast_horizon=self.horizon,
+                control_horizon=self.horizon,
+            )
+            self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            self.runner.prepare_run()
+            self.env_opt = self.runner.env
 
     def define_e1(self):
         """
