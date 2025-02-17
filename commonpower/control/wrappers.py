@@ -186,11 +186,18 @@ class SingleAgentWrapper(gym.Wrapper):
 
         """
         dummy_action = self.env.action_space.sample()
+        #print(self.ctrl_id)
+        #print(dummy_action[self.ctrl_id])
         act_count = 0
         # fill action dictionary with values
         for n_id, n_act in dummy_action[self.ctrl_id].items():
             for el_id, el_act in n_act.items():
                 num_act = el_act.shape[0]
+                #print(num_act, n_id, el_id)
+                #print(act_count, act_count + num_act)
+                #print(dummy_action[self.ctrl_id][n_id][el_id].shape)
+
+                #print(action)
                 dummy_action[self.ctrl_id][n_id][el_id] = action[act_count : act_count + num_act]
                 act_count = act_count + num_act
 

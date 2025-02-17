@@ -1,0 +1,267 @@
+import torch
+import torch.nn as nn
+import torch.distributions as distributions
+import numpy as np
+from torch.optim import Adam
+
+from stable_baselines3 import SAC
+from stable_baselines3.common.type_aliases import GymEnv
+from stable_baselines3.common.buffers import ReplayBuffer  # SB3 standard replay buffer
+from stable_baselines3.common.callbacks import EventCallback
+
+# Import your custom modules:
+# from architectures.gaussian_policy import ContGaussianPolicy
+from architectures.utils import Model, gen_noise
+
+class DARC_SB3(SAC):
+    """
+    DARCSAC extends Stable-Baselines3 SAC to incorporate domain adaptation components.
+    In this updated version, an episode is ended (i.e. done is set to True) once a fixed
+    number of steps (n_steps) have been executed.
+    """
+    def __init__(self,
+                 policy: str,
+                 env: GymEnv,
+                 target_env: GymEnv,
+                 sa_config: dict,
+                 sas_config: dict,
+                 delta_r_scale: float = 1.0,
+                 s_t_ratio: int = 10,
+                 noise_scale: float = 1.0,
+                 n_steps_buffer: int = 1000,
+                 **kwargs):
+        """
+        :param policy: Policy identifier.
+        :param env: Source environment used for training.
+        :param target_env: Target environment for collecting additional rollouts.
+        :param sa_config: Configuration for the state–action classifier.
+        :param sas_config: Configuration for the state–action–next_state classifier.
+        :param delta_r_scale: Scale factor for the reward correction term.
+        :param s_t_ratio: Ratio controlling how often to collect target rollouts (in terms of games).
+        :param noise_scale: Scale of the noise added to classifier inputs.
+        :param kwargs: Additional keyword arguments for SAC.
+        """
+        super(DARC_SB3, self).__init__(policy, env, **kwargs)
+
+        # Buffers for episode info.
+        self.ep_info_buffer = []
+        self.ep_success_buffer = []
+
+        self.target_env = target_env
+        self.delta_r_scale = delta_r_scale
+        self.s_t_ratio = s_t_ratio
+        self.noise_scale = noise_scale
+
+        # Create a target replay buffer.
+        self.target_buffer = ReplayBuffer(
+            buffer_size=int(kwargs.get("buffer_size", 1e5)),
+            observation_space=target_env.observation_space,
+            action_space=target_env.action_space,
+            device=self.device,
+            optimize_memory_usage=True,
+            handle_timeout_termination=False,
+        )
+
+        # Initialize classifiers.
+        self.sa_classifier = Model(sa_config).to(self.device)
+        self.sa_classifier_opt = Adam(self.sa_classifier.parameters(), lr=self.learning_rate)
+        self.sas_adv_classifier = Model(sas_config).to(self.device)
+        self.sas_adv_classifier_opt = Adam(self.sas_adv_classifier.parameters(), lr=self.learning_rate)
+
+        # Episode counters.
+        self.num_episodes = 0
+        self.current_episode_step = 0
+
+        # Fixed episode length. Try to fetch from env; if unavailable, use a default value.
+        try:
+            self.n_steps = self.env.get_attr('_max_episode_steps')[0]
+        except Exception:
+            self.n_steps = kwargs.get("n_steps", 1000)
+
+        # Store the last observation.
+        self._last_obs = None
+
+    def update_classifiers(self, source_batch, target_batch):
+        """
+        Update the domain classifiers using samples from the source and target buffers.
+        """
+        s_states = torch.as_tensor(source_batch.observations, dtype=torch.float32).to(self.device)
+        s_actions = torch.as_tensor(source_batch.actions, dtype=torch.float32).to(self.device)
+        s_next_states = torch.as_tensor(source_batch.next_observations, dtype=torch.float32).to(self.device)
+
+        t_states = torch.as_tensor(target_batch.observations, dtype=torch.float32).to(self.device)
+        t_actions = torch.as_tensor(target_batch.actions, dtype=torch.float32).to(self.device)
+        t_next_states = torch.as_tensor(target_batch.next_observations, dtype=torch.float32).to(self.device)
+
+        sa_inputs = torch.cat([s_states, s_actions], dim=1)
+        sas_inputs = torch.cat([s_states, s_actions, s_next_states], dim=1)
+        sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
+        sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
+        sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
+        sas_log_probs = torch.log(torch.softmax(sas_logits + sa_logits, dim=1) + 1e-12)
+
+        delta_r = (sas_log_probs[:, 1] - sas_log_probs[:, 0] -
+                   sa_log_probs[:, 1] + sa_log_probs[:, 0])
+
+        s_sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
+        s_sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
+        t_sa_inputs = torch.cat([t_states, t_actions], dim=1)
+        t_sas_inputs = torch.cat([t_states, t_actions, t_next_states], dim=1)
+        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale, t_sa_inputs, self.device))
+        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale, t_sas_inputs, self.device))
+
+        loss_function = nn.CrossEntropyLoss()
+        label_source = torch.zeros(s_sa_logits.shape[0], dtype=torch.long, device=self.device)
+        label_target = torch.ones(t_sa_logits.shape[0], dtype=torch.long, device=self.device)
+
+        classify_loss = loss_function(s_sa_logits, label_source)
+        classify_loss += loss_function(t_sa_logits, label_target)
+        classify_loss += loss_function(s_sas_logits, label_source)
+        classify_loss += loss_function(t_sas_logits, label_target)
+
+        self.sa_classifier_opt.zero_grad()
+        self.sas_adv_classifier_opt.zero_grad()
+        classify_loss.backward()
+        self.sa_classifier_opt.step()
+        self.sas_adv_classifier_opt.step()
+
+        return delta_r.mean(), classify_loss
+
+    def collect_target_rollout(self):
+        """
+        Collect a full rollout (episode) from the target environment.
+        """
+        obs, _ = self.target_env.reset()
+        done = False
+        while not done:
+            action, _ = self.policy.predict(obs, deterministic=False)
+            next_obs, reward, done, trunc, info = self.target_env.step(action)
+            self.target_buffer.add(obs, next_obs, action, reward, done, info)
+            obs = next_obs
+
+    def warmup(self, warmup_steps: int):
+        """
+        Fill the replay buffer with a few random steps.
+        """
+        obs = self.env.reset()
+        self._last_obs = obs
+        self.current_episode_step = 0
+        for _ in range(warmup_steps):
+            action = self.env.action_space.sample()
+            action_1 = np.array([[action[0]]])
+            new_obs, reward, done, info = self.env.step(action_1)
+            self.replay_buffer.add(obs, new_obs, action, reward, done, info)
+            self.current_episode_step += 1
+            if done or self.current_episode_step >= self.n_steps:
+                obs = self.env.reset()
+                self.current_episode_step = 0
+                self.num_episodes += 1
+            else:
+                obs = new_obs
+        self._last_obs = obs
+
+    def train(self):
+        """
+        Performs a single training iteration corresponding to one environment step.
+        If the fixed episode length is reached, the done flag is set to True.
+        
+        Returns:
+            Always 1 (one timestep processed).
+        """
+        if self._last_obs is None:
+            self._last_obs = self.env.reset()
+            self.current_episode_step = 0
+
+        # Select an action.
+        action, _ = self.policy.predict(self._last_obs, deterministic=False)
+        # Execute the action.
+        next_obs, reward, env_done, info = self.env.step(action)
+        self.current_episode_step += 1
+
+        # Override done if the fixed episode length is reached.
+        done = env_done or (self.current_episode_step >= self.n_steps)
+        if self.current_episode_step >= self.n_steps:
+            # Update info to mark timeout, handling both dict and list types.
+            if isinstance(info, dict):
+                info["timeout"] = True
+            elif isinstance(info, list):
+                for item in info:
+                    if isinstance(item, dict):
+                        item["timeout"] = True
+
+        # Add the transition.
+        self.replay_buffer.add(self._last_obs, next_obs, action, reward, done, info)
+
+        if done:
+            self.num_episodes += 1
+            self.current_episode_step = 0
+            self._last_obs = self.env.reset()
+            if self.num_episodes % self.s_t_ratio == 0:
+                self.collect_target_rollout()
+        else:
+            self._last_obs = next_obs
+
+        # Perform gradient updates if sufficient samples are available.
+        if self.replay_buffer.pos >= self.batch_size:
+            for _ in range(self.gradient_steps):
+                source_batch = self.replay_buffer.sample(self.batch_size)
+                sac_info = self._update(source_batch)
+                if self.target_buffer.pos >= self.batch_size:
+                    target_batch = self.target_buffer.sample(self.batch_size)
+                    delta_r, classify_loss = self.update_classifiers(source_batch, target_batch)
+                    self.logger.record("darc/delta_r", delta_r.item())
+                    self.logger.record("darc/classify_loss", classify_loss.item())
+
+        return 1
+
+    def calculate_games(self):
+        """
+        Returns the number of completed episodes (games).
+        """
+        return self.num_episodes
+
+    def learn(self, total_timesteps: int, log_interval: int = 100, **kwargs):
+        """
+        Main training loop. Each call to train() processes one environment step.
+        Logs the number of timesteps and completed episodes.
+        
+        :param total_timesteps: Total number of steps to train.
+        :param log_interval: Logging frequency (in timesteps).
+        :return: self
+        """
+        self._setup_learn(total_timesteps=total_timesteps)
+        timesteps = 0
+        while timesteps < total_timesteps:
+            timesteps += self.train()  # Each train() call is one timestep.
+            if timesteps % log_interval == 0:
+                self.logger.dump(timesteps)
+            #print("Timesteps:", timesteps, "Games:", self.calculate_games())
+        return self
+
+    def _update(self, sampler):
+        """
+        Calls the SAC training update.
+        """
+        return super().train(gradient_steps=self.gradient_steps, batch_size=self.batch_size)
+    
+    def _excluded_save_params(self):
+        return super()._excluded_save_params() + [
+            "target_env", "target_buffer", "sa_classifier", "sas_adv_classifier"
+        ]
+
+    def save(self, path: str):
+        """
+        Save SAC components and classifier networks.
+        """
+        super().save(path)
+        torch.save(self.sa_classifier.state_dict(), path + "_sa_classifier.pt")
+        torch.save(self.sas_adv_classifier.state_dict(), path + "_sas_adv_classifier.pt")
+
+    def load(self, path: str):
+        """
+        Load SAC components and classifier networks.
+        """
+        super().load(path)
+        self.sa_classifier.load_state_dict(torch.load(path + "_sa_classifier.pt", map_location=self.device))
+        self.sas_adv_classifier.load_state_dict(torch.load(path + "_sas_adv_classifier.pt", map_location=self.device))
+
