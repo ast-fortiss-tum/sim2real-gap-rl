@@ -11,10 +11,10 @@ from mixed_reality.msg import Control
 from cv_bridge import CvBridge
 
 from stable_baselines3 import SAC  # Import the Stable-Baselines3 SAC
-from version7_RL import preprocess_image
+from training.version7_RL import preprocess_image
 
 # Path to the Stable-Baselines3 SAC model
-MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/sac_donkeycar3'
+MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/final_models/very_good_vanilla_m1.zip'
 
 FIXED_THROTTLE = True
 STEERING = 0
@@ -24,7 +24,23 @@ model = None
 pub_throttle_steering = None
 bridge = CvBridge()
 
+prev_time = None
+
 def new_image(msg):
+
+    global prev_time
+    now = time.time()
+    if prev_time is not None and (now - prev_time) < 0.00:
+        return
+    prev_time = now
+
+    #if prev_time is None:
+    #    prev_time = time.time()
+    #elif prev_time - time.time() < 0.2:
+    #    prev_time = time.time()
+    #else:
+    #    return
+    
     global FIXED_THROTTLE
     global model
     global pub_throttle_steering
@@ -37,16 +53,23 @@ def new_image(msg):
 
     # Predict actions using the SAC model
     action, _ = model.predict(image, deterministic=True)
-    print(f"Action: {action}")
+    #print(f"Action: {action}")
     steering = action[0]
 
     if FIXED_THROTTLE:
-        throttle = 0.1
+        throttle = 0.6
 
     # Publish throttle and steering commands
     if pub_throttle_steering is None:
         pub_throttle_steering = rospy.Publisher("model/throttle_steering", Control, queue_size=10)
-    msg = Control(throttle, steering, False, False, False)
+    msg = Control()
+    msg.throttle = throttle
+    msg.steering = steering
+    msg.brake = False
+    msg.reverse = False
+    msg.stopping = False
+    #msg.header.stamp = rospy.Time.now()
+    
     pub_throttle_steering.publish(msg)
 
 def model_node():
@@ -54,16 +77,16 @@ def model_node():
     global model
 
     print(f"Loading model: {MODEL_PATH}")
-    model = SAC.load(MODEL_PATH)  # Load the Stable-Baselines3 SAC model
+    model = SAC.load(MODEL_PATH, device="cpu")  # Load the Stable-Baselines3 SAC model
     print("Model loaded successfully.")
 
     rospy.init_node("model_node", anonymous=True)
-    rate = rospy.Rate(10)  # Set the desired frequency to 3 Hz
+    rate = rospy.Rate(20)  # Set the desired frequency to 3 Hz
     rospy.Subscriber("/sim/image", SensorImage, new_image)
-
-    while not rospy.is_shutdown():
+    rospy.spin()
+    #while not rospy.is_shutdown():
         # Let ROS handle the callbacks and maintain a 3 Hz loop
-        rate.sleep()
+    #    rate.sleep()
 
 if __name__ == '__main__':
     try:
