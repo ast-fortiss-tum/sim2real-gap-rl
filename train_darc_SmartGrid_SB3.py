@@ -4,7 +4,7 @@ import gymnasium as gym
 import datetime
 #from models.darc import DARC
 #from gym.wrappers import Monitor
-from models.darc_from_sac2 import DARC_SB3
+from models.darc_from_sac7 import DARC_SB3
 #from models.darc_SB3 import DARC
 from models.sac import ContSAC
 from environments.SmartGrid import *
@@ -141,6 +141,8 @@ running_state = ZFilter((state_dim,), clip=2)
 #             max_steps=args.max_steps,batch_size=args.bs,\
 #             savefolder=save_model_path,running_mean=running_state,if_normalize = args.normalize, delta_r_scale = args.deltar,noise_scale = args.noise, warmup_games = args.warmup)
 print(source_env.action_space)
+print(source_env.observation_space)
+"""
 model = DARC_SB3(
     policy="MlpPolicy",           # Use your custom policy if registered, e.g. "CustomGaussianPolicy"
     env=source_env,               # Source environment
@@ -154,8 +156,32 @@ model = DARC_SB3(
     buffer_size=10000,           # Replay buffer size
     batch_size=12,                # Batch size for updates
     gradient_steps=1,             # Number of gradient steps per rollout collection
-    verbose=1                     # Verbosity level for logging
+    verbose=1,                     # Verbosity level for logging
+    n_eval=100,
+    warmup_steps=2000
 )
+"""
+model = DARC_SB3(policy="MlpPolicy",
+                env=source_env,
+                target_env=target_env,
+                sa_config=sa_config,
+                sas_config=sas_config,
+                delta_r_scale=1.0,
+                s_t_ratio=10,
+                noise_scale=0.0,
+                warmup_steps=100,
+                log_dir="./logs",
+                n_eval=100,
+                buffer_size=1000,
+                batch_size=64,
+                gradient_steps=1,
+                learning_rate=3e-4,
+                save_checkpoint_freq=10000,
+                verbose=1)  # verbose is optional
 
-model.learn(total_timesteps = 550*24, deterministic=False)
-model.save(save_model_path)
+# Train the model. This will perform learning and save checkpoints as configured.
+model.learn(total_timesteps=20000, log_interval=100)
+
+# Optionally, evaluate the model.
+avg_reward = model.eval_src(num_games=5, render=False)
+print("Evaluation average reward on source env:", avg_reward)

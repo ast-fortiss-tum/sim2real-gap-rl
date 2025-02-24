@@ -118,17 +118,31 @@ class SmartGridBasic:
 
     def setup_system(self):
         # --- Define Nodes ---
-        self.n1 = Bus("MultiFamilyHouse", {
+        """self.n1 = Bus("MultiFamilyHouse", {
             'p': (-50, 50),
             'q': (-50, 50),
             'v': (0.95, 1.05),
             'd': (-15, 15)
-        })
+        })"""
 
+        self.n1 = RTPricedBus("MultiFamilyHouse", {
+            'p': (-50, 50),
+            'q': (-50, 50),
+            'v': (0.95, 1.05),
+            'd': (-15, 15)
+        }).add_data_provider(self.dp2)
+
+        self.m1 = ExternalGrid("Grid1", {
+            'p': (-50, 50),
+            'q': (-50, 50)
+        })
+        """
         self.m1 = TradingBusLinear("Trading1", {
             'p': (-50, 50),
             'q': (-50, 50)
         }).add_data_provider(self.dp2)
+        
+        """
 
         # --- Define Components ---
         # Create the energy storage system using the subclass's definition.

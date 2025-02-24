@@ -213,7 +213,7 @@ class DARC(ContSAC):
             torch.load(path + '/sas_adv_classifier', map_location=torch.device(device)))
         self.running_mean = pickle.load(open(path + '/running_mean', "rb"))
 
-    def eval_src(self, num_games, render=False):
+    def eval_src(self, num_games, render=True):
         self.policy.eval()
         self.twin_q.eval()
         reward_all = 0
@@ -241,7 +241,7 @@ class DARC(ContSAC):
             reward_all += total_reward
         return reward_all/num_games
     
-    def eval_tgt(self, num_games, render=False):
+    def eval_tgt(self, num_games, render=True):
         self.policy.eval()
         self.twin_q.eval()
         reward_all = 0

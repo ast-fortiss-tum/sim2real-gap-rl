@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.distributions as distributions
 import numpy as np
 from torch.optim import Adam
+from torch.utils.tensorboard import SummaryWriter
 
 from stable_baselines3 import SAC
 from stable_baselines3.common.type_aliases import GymEnv
 from stable_baselines3.common.buffers import ReplayBuffer  # SB3 standard replay buffer
-from stable_baselines3.common.callbacks import EventCallback
+from stable_baselines3.common.callbacks import BaseCallback  # For optional callbacks
 
 # Import your custom modules:
 # from architectures.gaussian_policy import ContGaussianPolicy
@@ -29,6 +29,7 @@ class DARC_SB3(SAC):
                  s_t_ratio: int = 10,
                  noise_scale: float = 1.0,
                  n_steps_buffer: int = 1000,
+                 log_dir: str = "./logs",  # New: directory for TensorBoard logs
                  **kwargs):
         """
         :param policy: Policy identifier.
@@ -39,9 +40,13 @@ class DARC_SB3(SAC):
         :param delta_r_scale: Scale factor for the reward correction term.
         :param s_t_ratio: Ratio controlling how often to collect target rollouts (in terms of games).
         :param noise_scale: Scale of the noise added to classifier inputs.
+        :param log_dir: Directory where TensorBoard logs will be saved.
         :param kwargs: Additional keyword arguments for SAC.
         """
         super(DARC_SB3, self).__init__(policy, env, **kwargs)
+
+        # Initialize the TensorBoard SummaryWriter.
+        self.tb_writer = SummaryWriter(log_dir)
 
         # Buffers for episode info.
         self.ep_info_buffer = []
@@ -72,6 +77,10 @@ class DARC_SB3(SAC):
         self.num_episodes = 0
         self.current_episode_step = 0
 
+        # For tracking total training steps and the cumulative reward for each episode.
+        self.total_steps = 0
+        self.episode_reward = 0.0
+
         # Fixed episode length. Try to fetch from env; if unavailable, use a default value.
         try:
             self.n_steps = self.env.get_attr('_max_episode_steps')[0]
@@ -81,9 +90,10 @@ class DARC_SB3(SAC):
         # Store the last observation.
         self._last_obs = None
 
-    def update_classifiers(self, source_batch, target_batch):
+    def update_classifiers(self, source_batch, target_batch, step):
         """
         Update the domain classifiers using samples from the source and target buffers.
+        Logs classifier accuracy and loss to TensorBoard.
         """
         s_states = torch.as_tensor(source_batch.observations, dtype=torch.float32).to(self.device)
         s_actions = torch.as_tensor(source_batch.actions, dtype=torch.float32).to(self.device)
@@ -95,6 +105,8 @@ class DARC_SB3(SAC):
 
         sa_inputs = torch.cat([s_states, s_actions], dim=1)
         sas_inputs = torch.cat([s_states, s_actions, s_next_states], dim=1)
+
+        # Compute logits with added noise.
         sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
         sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
         sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
@@ -103,6 +115,7 @@ class DARC_SB3(SAC):
         delta_r = (sas_log_probs[:, 1] - sas_log_probs[:, 0] -
                    sa_log_probs[:, 1] + sa_log_probs[:, 0])
 
+        # For logging classifier accuracy, re-compute the logits (with noise).
         s_sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
         s_sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
         t_sa_inputs = torch.cat([t_states, t_actions], dim=1)
@@ -118,7 +131,28 @@ class DARC_SB3(SAC):
         classify_loss += loss_function(t_sa_logits, label_target)
         classify_loss += loss_function(s_sas_logits, label_source)
         classify_loss += loss_function(t_sas_logits, label_target)
+        
+        # Compute classifier accuracies.
+        with torch.no_grad():
+            s_sa_pred = torch.argmax(s_sa_logits, dim=1)
+            t_sa_pred = torch.argmax(t_sa_logits, dim=1)
+            sa_source_acc = (s_sa_pred == label_source).float().mean()
+            sa_target_acc = (t_sa_pred == label_target).float().mean()
 
+            s_sas_pred = torch.argmax(s_sas_logits, dim=1)
+            t_sas_pred = torch.argmax(t_sas_logits, dim=1)
+            sas_source_acc = (s_sas_pred == label_source).float().mean()
+            sas_target_acc = (t_sas_pred == label_target).float().mean()
+
+        # Log these metrics to TensorBoard.
+        self.tb_writer.add_scalar("classifier/sa_source_accuracy", sa_source_acc.item(), step)
+        self.tb_writer.add_scalar("classifier/sa_target_accuracy", sa_target_acc.item(), step)
+        self.tb_writer.add_scalar("classifier/sas_source_accuracy", sas_source_acc.item(), step)
+        self.tb_writer.add_scalar("classifier/sas_target_accuracy", sas_target_acc.item(), step)
+        self.tb_writer.add_scalar("classifier/classify_loss", classify_loss.item(), step)
+        self.tb_writer.add_scalar("classifier/delta_r", delta_r.mean().item(), step)
+
+        # Perform backpropagation and update the classifier parameters.
         self.sa_classifier_opt.zero_grad()
         self.sas_adv_classifier_opt.zero_grad()
         classify_loss.backward()
@@ -130,14 +164,19 @@ class DARC_SB3(SAC):
     def collect_target_rollout(self):
         """
         Collect a full rollout (episode) from the target environment.
+        Logs the target domain episode reward to TensorBoard.
         """
         obs, _ = self.target_env.reset()
         done = False
+        episode_reward = 0.0
         while not done:
             action, _ = self.policy.predict(obs, deterministic=False)
             next_obs, reward, done, trunc, info = self.target_env.step(action)
+            episode_reward += reward
             self.target_buffer.add(obs, next_obs, action, reward, done, info)
             obs = next_obs
+        self.num_episodes += 1
+        self.tb_writer.add_scalar("target/episode_reward", episode_reward, self.num_episodes)
 
     def warmup(self, warmup_steps: int):
         """
@@ -151,10 +190,13 @@ class DARC_SB3(SAC):
             action_1 = np.array([[action[0]]])
             new_obs, reward, done, info = self.env.step(action_1)
             self.replay_buffer.add(obs, new_obs, action, reward, done, info)
+            self.episode_reward += reward
             self.current_episode_step += 1
             if done or self.current_episode_step >= self.n_steps:
+                self.tb_writer.add_scalar("source/episode_reward", self.episode_reward, self.num_episodes)
                 obs = self.env.reset()
                 self.current_episode_step = 0
+                self.episode_reward = 0.0
                 self.num_episodes += 1
             else:
                 obs = new_obs
@@ -171,17 +213,19 @@ class DARC_SB3(SAC):
         if self._last_obs is None:
             self._last_obs = self.env.reset()
             self.current_episode_step = 0
+            self.episode_reward = 0.0
 
         # Select an action.
         action, _ = self.policy.predict(self._last_obs, deterministic=False)
         # Execute the action.
         next_obs, reward, env_done, info = self.env.step(action)
+        self.episode_reward += reward
         self.current_episode_step += 1
 
         # Override done if the fixed episode length is reached.
         done = env_done or (self.current_episode_step >= self.n_steps)
         if self.current_episode_step >= self.n_steps:
-            # Update info to mark timeout, handling both dict and list types.
+            # Mark timeout in info.
             if isinstance(info, dict):
                 info["timeout"] = True
             elif isinstance(info, list):
@@ -192,9 +236,14 @@ class DARC_SB3(SAC):
         # Add the transition.
         self.replay_buffer.add(self._last_obs, next_obs, action, reward, done, info)
 
+        self.total_steps += 1
+
         if done:
+            # Log the source domain episode reward.
+            self.tb_writer.add_scalar("source/episode_reward", self.episode_reward, self.num_episodes)
             self.num_episodes += 1
             self.current_episode_step = 0
+            self.episode_reward = 0.0
             self._last_obs = self.env.reset()
             if self.num_episodes % self.s_t_ratio == 0:
                 self.collect_target_rollout()
@@ -208,7 +257,7 @@ class DARC_SB3(SAC):
                 sac_info = self._update(source_batch)
                 if self.target_buffer.pos >= self.batch_size:
                     target_batch = self.target_buffer.sample(self.batch_size)
-                    delta_r, classify_loss = self.update_classifiers(source_batch, target_batch)
+                    delta_r, classify_loss = self.update_classifiers(source_batch, target_batch, self.total_steps)
                     self.logger.record("darc/delta_r", delta_r.item())
                     self.logger.record("darc/classify_loss", classify_loss.item())
 
@@ -232,10 +281,9 @@ class DARC_SB3(SAC):
         self._setup_learn(total_timesteps=total_timesteps)
         timesteps = 0
         while timesteps < total_timesteps:
-            timesteps += self.train()  # Each train() call is one timestep.
+            timesteps += self.train()  # Each train() call processes one timestep.
             if timesteps % log_interval == 0:
                 self.logger.dump(timesteps)
-            #print("Timesteps:", timesteps, "Games:", self.calculate_games())
         return self
 
     def _update(self, sampler):
@@ -246,7 +294,7 @@ class DARC_SB3(SAC):
     
     def _excluded_save_params(self):
         return super()._excluded_save_params() + [
-            "target_env", "target_buffer", "sa_classifier", "sas_adv_classifier"
+            "target_env", "target_buffer", "sa_classifier", "sas_adv_classifier", "tb_writer"
         ]
 
     def save(self, path: str):
@@ -264,4 +312,19 @@ class DARC_SB3(SAC):
         super().load(path)
         self.sa_classifier.load_state_dict(torch.load(path + "_sa_classifier.pt", map_location=self.device))
         self.sas_adv_classifier.load_state_dict(torch.load(path + "_sas_adv_classifier.pt", map_location=self.device))
+
+
+# === Optional: A custom callback for additional TensorBoard logging ===
+class TensorBoardLoggingCallback(BaseCallback):
+    """
+    Custom callback for logging additional metrics to TensorBoard.
+    """
+    def __init__(self, verbose=0):
+        super(TensorBoardLoggingCallback, self).__init__(verbose)
+
+    def _on_step(self) -> bool:
+        # For example, log the current number of timesteps:
+        if hasattr(self.model, 'tb_writer'):
+            self.model.tb_writer.add_scalar("custom/num_timesteps", self.num_timesteps, self.num_timesteps)
+        return True
 

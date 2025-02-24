@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 # import gymnasium as gym
 
 import datetime
@@ -69,7 +69,7 @@ parser.add_argument('--warmup', type=int, default=50,
 
 args = parser.parse_args()
 
-
+env_name = "HalfCheetah-v4"
 env_name = args.env_name
 variety_name = args.variety_name
 degree = args.degree
@@ -112,7 +112,8 @@ else:
     save_model_path += '_'
     save_model_path += str(env_name)
     if args.break_src == 1:
-        source_env = BrokenJointEnv(gym.make(env_name), [args.break_joint],args.broken_p)
+        #source_env = BrokenJointEnv(gym.make(env_name), [args.break_joint],args.broken_p)
+        source_env = BrokenJointEnv(gym.make(env_name, render_mode="human"), [args.break_joint], args.broken_p)
         target_env = gym.make(env_name)
     else:
         source_env = gym.make(env_name)

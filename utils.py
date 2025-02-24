@@ -31,7 +31,7 @@ hype_parameters = {
 
 
 def generate_xml_path():
-    import gym, os
+    import gymnasium as gym, os
     xml_path = os.path.join(gym.__file__[:-11], 'envs/mujoco/assets')
 
     assert os.path.exists(xml_path)
