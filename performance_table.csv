@@ -1,0 +1,7 @@
+Run,MeanSpeed,SurvivedDeg_1.5,SafePerc_1.5,SurvivedDeg_2.5,SafePerc_2.5,SurvivedDeg_100.0,SafePerc_100.0
+fake_camera_inc,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+fake_sim_medium,2.2217476246531755,0.0005437511913784681,100.0,0.0005437511913784681,100.0,0.0005437511913784681,100.0
+fake_sim_slow,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+real_camera_medium,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+real_camera_slow,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+real_sim_inc,0.0,0.0,0.0,0.0,0.0,0.0,0.0

@@ -477,9 +477,9 @@ def main():
     name = args.name
     
     # --- Load poses JSON ---
-    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_poses.json'
-    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_moving.json'
-    metrics_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/{name}_ctes.json'
+    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_poses.json'
+    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_moving.json'
+    metrics_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_ctes.json'
 
     poses_data = load_data(poses_file_path)
     lanes = poses_data.get("lanes")

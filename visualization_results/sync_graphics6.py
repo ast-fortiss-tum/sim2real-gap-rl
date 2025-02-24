@@ -94,20 +94,20 @@ def get_going_flag(current_time, going_times, going_flags):
     return going_flags[idx]
 
 def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flags,
-                metrics_times, metrics_cte,
-                steps_per_segment=10, subsample=1):
+                steps_per_segment=10, subsample=1, cte_threshold=3.0):
     """
     Create a synchronized animation on four axes:
-      - ax1: Lane/pose animation (with a moving marker, trace, and on-track percentage)
+      - ax1: Lane/pose animation (with a moving marker, trace, and a text display)
       - ax2: Dynamic Speed plot (with background partitions for going vs not going)
       - ax3: Dynamic CTE plot (with the same background as ax2)
-      - ax4: Driven angle plot (angle in degrees versus time)
+      - ax4: Driven Angle plot (angle in degrees versus time)
     
-    Here, speed is computed from the interpolated poses (which now represent positions scaled by 25)
-    and then smoothed.
+    Speed is computed from the interpolated poses (positions scaled by 25) and then smoothed.
     The x-axes for ax2, ax3 and ax4 update to show the seconds passed.
     
-    To avoid shifts when steps_per_segment != 1, the simulation time is linearly remapped from the original times.
+    In this version, the CTE is calculated from the pose relative to a precomputed centerline.
+    By convention, a lateral distance equal to the half-width (distance from the centerline to a lane boundary)
+    corresponds to 1.5 cte-units.
     """
     # Subsample poses and times if desired.
     poses = poses[::subsample]
@@ -140,54 +140,27 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         return t_start + (i / (total_frames - 1)) * (t_end - t_start)
     
     # Normalize time arrays by subtracting t_start.
-    metrics_times_norm = np.array(metrics_times) - t_start
     going_times_norm = np.array(going_times) - t_start
     # For speeds, create a new normalized time array for the total number of frames:
     speed_times_norm = np.linspace(0, total_sim_time, total_frames)
     
-    # --- Setup for ax1 (lane/pose animation) ---
-    lane_point, = ax1.plot([], [], 'o', markersize=12)
-    lane_trace = LineCollection([], linestyle='--', linewidth=1.5, alpha=0.6)
-    ax1.add_collection(lane_trace)
-    percentage_text = ax1.text(0.05, 0.95, '', transform=ax1.transAxes,
-                               fontsize=14, color='blue', verticalalignment='top')
-    
-    # --- Setup for ax2 (Dynamic Speed plot) ---
-    speed_line, = ax2.plot([], [], color='blue', label='Speed (smoothed)')
-    ax2.set_title("Speed (computed from Pose)")
-    ax2.set_xlabel("[s]")
-    ax2.set_ylabel("Speed [cm/s]")
-    ax2.grid(True)
-    
-    # --- Setup for ax3 (Dynamic CTE plot) ---
-    cte_line, = ax3.plot([], [], color='black', label='CTE')
-    ax3.set_title("CTE")
-    ax3.set_xlabel("[s]")
-    ax3.set_ylabel("CTE [1]")
-    ax3.grid(True)
-    
-    # --- Setup for ax4 (Driven Angle plot) ---
-    angle_line, = ax4.plot([], [], color='magenta', label='Driven Angle')
-    # Add an indicator for high CTE on the driven angle plot.
-    cte_indicator, = ax4.plot([], [], 'o', color='red', markersize=10, label='High CTE')
-    # Add a warning text to show when CTE is high.
-    warning_text = ax4.text(0.95, 0.95, "", transform=ax4.transAxes,
-                            ha='right', va='top', fontsize=12, color='red')
-    ax4.set_title("Driven Angle")
-    ax4.set_xlabel("[s]")
-    ax4.set_ylabel("Angle [deg]")
-    ax4.grid(True)
-    
-    # For storing lane/pose trace points.
-    lane_trace_points = []
-    # For storing driven angle data as (time, angle) tuples.
-    angle_trace = []
-    
-    # Define a threshold for CTE.
-    cte_threshold = 4.0
-    
+    # --- Precompute a centerline and half-widths from lanes[0] and lanes[1] ---
+    if lanes and len(lanes) >= 2:
+        lane0_points = lanes[0]
+        lane1_points = lanes[1]
+        n = min(len(lane0_points), len(lane1_points))
+        centerline = []
+        half_widths = []
+        for i in range(n):
+            cx = (lane0_points[i][0] + lane1_points[i][0]) / 2.0
+            cy = (lane0_points[i][1] + lane1_points[i][1]) / 2.0
+            centerline.append((cx, cy))
+            hw = np.hypot(lane0_points[i][0] - cx, lane0_points[i][1] - cy)
+            half_widths.append(hw)
+    else:
+        centerline = None
+
     # --- Compute the geometrical center of the road ---
-    # Here we use lanes[0] and lanes[1] as the road boundaries.
     if len(lanes) >= 2:
         all_points = lanes[0] + lanes[1]
         center_x = np.mean([pt[0] for pt in all_points])
@@ -200,9 +173,60 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
     ref_angle = np.arctan2(start_y - center_y, start_x - center_x)
     
     # --- Persistent state for driven angle unwrapping ---
-    # This dictionary now also holds the previous going state.
     unwrapped_state = {"prev_raw": None, "prev_unwrapped": None, "prev_going": None}
+    
+    # --- For accumulating CTE data computed from the pose ---
+    cte_trace = []  # list of tuples (time, computed_cte)
+    
+    # --- Metrics accumulation for CTE-based evaluation ---
+    metrics_stats = {
+         "prev_time": None,
+         "prev_angle": None,
+         "time_in": 0.0,
+         "time_total": 0.0,
+         "angle_in": 0.0,
+         "angle_total": 0.0
+    }
 
+    # --- Setup for ax1 (lane/pose animation) ---
+    lane_point, = ax1.plot([], [], 'o', markersize=12)
+    lane_trace = LineCollection([], linestyle='--', linewidth=1.5, alpha=0.6)
+    ax1.add_collection(lane_trace)
+    percentage_text = ax1.text(0.55, 0.20, '', transform=ax1.transAxes,
+                               fontsize=14, color='blue', verticalalignment='top')
+    
+    # --- Setup for ax2 (Dynamic Speed plot) ---
+    speed_line, = ax2.plot([], [], color='blue', label='Speed (smoothed)')
+    ax2.set_title("Speed (computed from Pose)")
+    ax2.set_xlabel("[s]")
+    ax2.set_ylabel("Speed [cm/s]")
+    ax2.grid(True)
+    
+    # --- Setup for ax3 (Dynamic CTE plot) ---
+    cte_line, = ax3.plot([], [], color='black', label='CTE')
+    ax3.set_title("CTE (computed from Pose)")
+    ax3.set_xlabel("[s]")
+    ax3.set_ylabel("CTE [units]")
+    ax3.grid(True)
+    
+    # --- Setup for ax4 (Driven Angle plot) ---
+    angle_line, = ax4.plot([], [], color='magenta', label='Driven Angle')
+    cte_indicator, = ax4.plot([], [], 'o', color='red', markersize=10, label='High CTE')
+    warning_text = ax4.text(0.95, 0.95, "", transform=ax4.transAxes,
+                            ha='right', va='top', fontsize=12, color='red')
+    lap_text = ax4.text(0.95, 0.85, "", transform=ax4.transAxes,
+                        ha='right', va='top', fontsize=12, color='blue')
+    
+    ax4.set_title("Driven Angle")
+    ax4.set_xlabel("[s]")
+    ax4.set_ylabel("Angle [deg]")
+    ax4.grid(True)
+    
+    # For storing lane/pose trace points.
+    lane_trace_points = []
+    # For storing driven angle data as (time, angle) tuples.
+    angle_trace = []
+    
     def init():
         lane_point.set_data([], [])
         lane_trace.set_segments([])
@@ -212,6 +236,7 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         angle_line.set_data([], [])
         cte_indicator.set_data([], [])
         warning_text.set_text("")
+        lap_text.set_text("")
         ax2.patches.clear()
         ax3.patches.clear()
         ax4.patches.clear()
@@ -220,7 +245,8 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         unwrapped_state["prev_raw"] = None
         unwrapped_state["prev_unwrapped"] = None
         unwrapped_state["prev_going"] = None
-        return lane_point, lane_trace, percentage_text, speed_line, cte_line, angle_line, cte_indicator, warning_text
+        return (lane_point, lane_trace, percentage_text, speed_line, cte_line, 
+                angle_line, cte_indicator, warning_text, lap_text)
 
     def update(frame):
         # Determine simulation time for this frame (linearly mapped)
@@ -231,10 +257,6 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         x, y, _ = interp_poses[frame]
         on_track = is_inside_lane_area([x, y], lanes[0], lanes[1])
         current_going = get_going_flag(sim_time, going_times, going_flags)
-        # Determine marker color:
-        # - Black if not going (stopped)
-        # - Green if going and on-track
-        # - Red if going and off-track
         if not current_going:
             point_color = 'black'
         else:
@@ -256,14 +278,6 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
                 colors.append(seg_color)
         lane_trace.set_segments(segments)
         lane_trace.set_color(colors)
-        if frame == total_frames - 1:
-            valid_points = [pt for pt in lane_trace_points if pt[4]]
-            if valid_points:
-                count_green = sum(1 for pt in valid_points if pt[3])
-                percentage = (count_green / len(valid_points)) * 100
-            else:
-                percentage = 0.0
-            percentage_text.set_text(f"Percentage on-track: {percentage:.1f}%")
         
         # --- Update dynamic Speed plot (ax2) ---
         idx_speed = np.where(speed_times_norm <= current_norm)[0]
@@ -275,15 +289,27 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         else:
             speed_line.set_data([], [])
         
-        # --- Update dynamic CTE plot (ax3) ---
-        idx_cte = np.where(metrics_times_norm <= current_norm)[0]
-        if len(idx_cte) > 0:
-            x_cte = metrics_times_norm[idx_cte]
-            y_cte = np.array(metrics_cte)[idx_cte]
-            cte_line.set_data(x_cte, y_cte)
-            ax3.set_xlim(0, current_norm + 0.1)
+        # --- Compute CTE from the pose ---
+        # Here we compute the lateral deviation relative to the centerline.
+        if centerline is not None:
+            # Find the closest centerline point.
+            distances = [np.hypot(x - cx, y - cy) for cx, cy in centerline]
+            idx_closest = np.argmin(distances)
+            closest_distance = distances[idx_closest]
+            hw = half_widths[idx_closest]
+            if hw > 0:
+                computed_cte = (closest_distance / hw) * 1.5
+            else:
+                computed_cte = 0
         else:
-            cte_line.set_data([], [])
+            computed_cte = 0
+        
+        # Append computed cte for plotting.
+        cte_trace.append((current_norm, computed_cte))
+        times_cte = [pt[0] for pt in cte_trace]
+        values_cte = [pt[1] for pt in cte_trace]
+        cte_line.set_data(times_cte, values_cte)
+        ax3.set_xlim(0, current_norm + 0.1)
         
         # --- Update background for ax2, ax3, and ax4 based on going data ---
         for a in (ax2, ax3, ax4):
@@ -298,18 +324,15 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
                     a.axvspan(interval_start, interval_end, facecolor='green', alpha=0.4, zorder=1)
         
         # --- Update Driven Angle plot (ax4) ---
-        # Compute the current raw angle (in degrees) relative to the reference.
         current_angle = np.arctan2(y - center_y, x - center_x)
         raw_delta = np.degrees(current_angle - ref_angle)
         
-        # If the vehicle is not going, reset the angle to 0.
         if not current_going:
             unwrapped_state["prev_raw"] = None
             unwrapped_state["prev_unwrapped"] = None
             unwrapped_state["prev_going"] = False
             continuous_angle = 0
         else:
-            # When going, if the previous state was not going then restart the unwrapping.
             if unwrapped_state.get("prev_going") is False or unwrapped_state["prev_going"] is None:
                 unwrapped_state["prev_raw"] = raw_delta
                 unwrapped_state["prev_unwrapped"] = 0
@@ -325,35 +348,100 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
                 unwrapped_state["prev_unwrapped"] = continuous_angle
             unwrapped_state["prev_going"] = True
         
-        # Reverse the sign of the output degrees.
         continuous_angle = -continuous_angle
-        angle_trace.append((current_norm, continuous_angle))
+        adjusted_angle = abs(continuous_angle)
+        lap_count = int(adjusted_angle // 360)
+        display_angle = adjusted_angle % 360
+        
+        angle_trace.append((current_norm, display_angle))
         times_angle = [pt[0] for pt in angle_trace]
         angles = [pt[1] for pt in angle_trace]
         angle_line.set_data(times_angle, angles)
         ax4.set_xlim(0, current_norm + 0.1)
+        lap_text.set_text(f"Laps: {lap_count}")
         
         # --- High CTE Indicator and Warning in Driven Angle Plot ---
-        # Determine current CTE value.
-        if len(idx_cte) > 0:
-            current_cte = np.array(metrics_cte)[idx_cte][-1]
-        else:
-            current_cte = 0
-        
-        if current_cte > cte_threshold:
-            cte_indicator.set_data([current_norm], [continuous_angle])
+        if computed_cte > cte_threshold:
+            cte_indicator.set_data([current_norm], [display_angle])
             warning_text.set_text("WARNING: High CTE!")
         else:
             cte_indicator.set_data([], [])
             warning_text.set_text("")
         
-        return lane_point, lane_trace, percentage_text, speed_line, cte_line, angle_line, cte_indicator, warning_text
+        # --- Accumulate metrics for CTE-based evaluation ---
+        if current_going:
+            if metrics_stats["prev_time"] is not None:
+                dt = current_norm - metrics_stats["prev_time"]
+                d_angle = abs(continuous_angle - metrics_stats["prev_angle"])
+                metrics_stats["time_total"] += dt
+                metrics_stats["angle_total"] += d_angle
+                if computed_cte <= cte_threshold:
+                    metrics_stats["time_in"] += dt
+                    metrics_stats["angle_in"] += d_angle
+            metrics_stats["prev_time"] = current_norm
+            metrics_stats["prev_angle"] = continuous_angle
+        else:
+            metrics_stats["prev_time"] = None
+            metrics_stats["prev_angle"] = None
+        
+        # --- At the final frame, display percentages and overlay the road area in ax1 ---
+        if frame == total_frames - 1:
+            if metrics_stats["time_total"] > 0:
+                time_percentage = (metrics_stats["time_in"] / metrics_stats["time_total"]) * 100
+            else:
+                time_percentage = 0.0
+            if metrics_stats["angle_total"] > 0:
+                angle_percentage = (metrics_stats["angle_in"] / metrics_stats["angle_total"]) * 100
+            else:
+                angle_percentage = 0.0
+            percentage_text.set_text(f"Time-based % below CTE: {time_percentage:.1f}%\n"
+                                       f"Angle-based % below CTE: {angle_percentage:.1f}%")
+            # --- ROAD AREA OVERLAY ON ax1 ---
+            if lanes and len(lanes) >= 2:
+                lane0_points = lanes[0]
+                lane1_points = lanes[1]
+                road_polygon = lane0_points + lane1_points[::-1]
+                road_poly_x = [p[0] for p in road_polygon]
+                road_poly_y = [p[1] for p in road_polygon]
+                n = min(len(lane0_points), len(lane1_points))
+                centerline_overlay = []
+                for i in range(n):
+                    cx = (lane0_points[i][0] + lane1_points[i][0]) / 2.0
+                    cy = (lane0_points[i][1] + lane1_points[i][1]) / 2.0
+                    centerline_overlay.append((cx, cy))
+                left_offsets = []
+                right_offsets = []
+                for i in range(n):
+                    cx, cy = centerline_overlay[i]
+                    if i < n - 1:
+                        dx = centerline_overlay[i+1][0] - centerline_overlay[i][0]
+                        dy = centerline_overlay[i+1][1] - centerline_overlay[i][1]
+                    else:
+                        dx = centerline_overlay[i][0] - centerline_overlay[i-1][0]
+                        dy = centerline_overlay[i][1] - centerline_overlay[i-1][1]
+                    norm_val = np.hypot(dx, dy)
+                    if norm_val == 0:
+                        nx, ny = 0, 0
+                    else:
+                        nx = -dy / norm_val
+                        ny = dx / norm_val
+                    half_width = np.hypot(lane0_points[i][0] - cx, lane0_points[i][1] - cy)
+                    safe_offset = (cte_threshold / 1.5) * half_width
+                    left_offsets.append((cx + safe_offset * nx, cy + safe_offset * ny))
+                    right_offsets.append((cx - safe_offset * nx, cy - safe_offset * ny))
+                safe_polygon = left_offsets + right_offsets[::-1]
+                safe_poly_x = [p[0] for p in safe_polygon]
+                safe_poly_y = [p[1] for p in safe_polygon]
+                ax1.fill(road_poly_x, road_poly_y, color='red', alpha=0.3, zorder=0)
+                ax1.fill(safe_poly_x, safe_poly_y, color='green', alpha=0.3, zorder=1)
+        
+        return (lane_point, lane_trace, percentage_text, speed_line, cte_line, 
+                angle_line, cte_indicator, warning_text, lap_text)
 
-    # --- Create a frame generator to synchronize simulation time to real time ---
     def frame_gen():
         start_real = time.time()
         for i in range(total_frames):
-            desired_sim_time = sim_time_for_frame(i)  # absolute simulation time (in seconds)
+            desired_sim_time = sim_time_for_frame(i)
             target_time = start_real + (desired_sim_time - t_start)
             sleep_time = target_time - time.time()
             if sleep_time > 0:
@@ -363,7 +451,7 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
     ani = animation.FuncAnimation(
         ax1.figure,
         update,
-        frames=frame_gen,  # use the custom generator
+        frames=frame_gen,
         init_func=init,
         blit=False,
         repeat=False
@@ -372,7 +460,7 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Dynamic synchronized animation: lane/pose plus dynamic CTE, computed (and smoothed) Speed, and driven angle plots synchronized to real time."
+        description="Dynamic synchronized animation: lane/pose plus dynamic CTE (computed from pose), computed (and smoothed) Speed, and driven angle plots synchronized to real time."
     )
     parser.add_argument('--name', type=str, required=True,
                         help="Name of experiments file for poses and lanes (without extension).")
@@ -381,10 +469,9 @@ def main():
     name = args.name
     
     # --- Load poses JSON ---
-    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/{name}_poses.json'
-    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/{name}_moving.json'
-    metrics_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/{name}_ctes.json'
-
+    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_poses.json'
+    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_moving.json'
+    
     poses_data = load_data(poses_file_path)
     lanes = poses_data.get("lanes")
     poses = poses_data.get("pose")
@@ -412,18 +499,6 @@ def main():
     if isinstance(going_times, str):
         going_times = ast.literal_eval(going_times)
     
-    # --- Load metrics JSON (only cte and time now) ---
-    metrics_data = load_data(metrics_file_path)
-    metrics_cte = metrics_data.get("cte")
-    metrics_times = metrics_data.get("time")
-    if metrics_cte is None or metrics_times is None:
-        print("Error: metrics JSON must contain 'cte' and 'time'.")
-        return
-    if isinstance(metrics_cte, str):
-        metrics_cte = ast.literal_eval(metrics_cte)
-    if isinstance(metrics_times, str):
-        metrics_times = ast.literal_eval(metrics_times)
-    
     # --- Create a figure with four subplots ---
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 16))
     
@@ -440,7 +515,7 @@ def main():
                 except:
                     continue
     if all_x and all_y:
-        margin = 1
+        margin = 100
         ax1.set_xlim(min(all_x)-margin, max(all_x)+margin)
         ax1.set_ylim(min(all_y)-margin, max(all_y)+margin)
     
@@ -450,16 +525,14 @@ def main():
     offtrack_line = mlines.Line2D([], [], color='red', marker='o', linestyle='None', markersize=8, label='Off-track')
     ax1.legend(handles=[offtrack_line, intrack_line, stopped_line], loc='upper left')
     
-    # Optionally, set y-axis limits for ax2 and ax3 manually.
-    ax2.set_ylim(0, 110)
-    ax3.set_ylim(0, 8)
-    ax4.set_ylim(0, 360*4) 
+    ax2.set_ylim(0, 200)
+    ax3.set_ylim(0, 6)
+    ax4.set_ylim(0, 360)
 
     ax1.set_facecolor('grey')
     
     ani = animate_all(ax1, ax2, ax3, ax4, poses, poses_time, lanes, going_times, going_list,
-                      metrics_times, metrics_cte,
-                      steps_per_segment=8, subsample=200)
+                      steps_per_segment=8, subsample=200, cte_threshold=3.0)
     
     plt.tight_layout()
     plt.show()
