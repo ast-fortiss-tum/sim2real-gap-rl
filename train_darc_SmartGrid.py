@@ -133,8 +133,8 @@ model = DARC(policy_config, value_config, sa_config, sas_config, source_env, tar
              max_steps=args.max_steps,batch_size=args.bs,\
              savefolder=save_model_path,running_mean=running_state,if_normalize = args.normalize, delta_r_scale = args.deltar,noise_scale = args.noise, warmup_games = args.warmup)
 
-#model.train(train_steps, deterministic=False)  # posible change to trainer.run() .... implementing DARC as SAC in the commonpower framework to train with safety layer. 
-#model.save_model(save_model_path)           # Ignore safety layer for now !!!!!!!!!!!
+model.train(train_steps, deterministic=False)  # posible change to trainer.run() .... implementing DARC as SAC in the commonpower framework to train with safety layer. 
+model.save_model(save_model_path)           # Ignore safety layer for now !!!!!!!!!!!
 
 
 

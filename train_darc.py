@@ -11,6 +11,28 @@ from datetime import datetime
 from utils import *
 import argparse
 
+# -----------------------------------------------------------------------------
+# Registration of the environments with Gymnasium.
+# -----------------------------------------------------------------------------
+
+from gymnasium.envs.registration import register
+import gymnasium as gym
+
+register(
+    id='Smart_Grids_Linear-v0',
+    entry_point='environments.smartgrid_env:make_smartgrid_linear',
+    max_episode_steps=24,
+)
+
+register(
+    id='Smart_Grids_Nonlinear-v0',
+    entry_point='environments.smartgrid_env:make_smartgrid_nonlinear',
+    max_episode_steps=24,
+)
+
+#env_linear = gym.make("Smart_Grids_Linear-v0")
+#env_nonlinear = gym.make("Smart_Grids_Nonlinear-v0")
+
 
 parser = argparse.ArgumentParser()
 
@@ -69,7 +91,7 @@ parser.add_argument('--warmup', type=int, default=50,
 
 args = parser.parse_args()
 
-env_name = "HalfCheetah-v4"
+env_name = "HalfCheetah-v4" 
 env_name = args.env_name
 variety_name = args.variety_name
 degree = args.degree
@@ -114,7 +136,7 @@ else:
     if args.break_src == 1:
         #source_env = BrokenJointEnv(gym.make(env_name), [args.break_joint],args.broken_p)
         source_env = BrokenJointEnv(gym.make(env_name, render_mode="human"), [args.break_joint], args.broken_p)
-        target_env = gym.make(env_name)
+        target_env = gym.make(env_name)   # If Smart grid one is env linear source and the other in target the non linear ...
     else:
         source_env = gym.make(env_name)
         target_env = BrokenJointEnv(gym.make(env_name), [args.break_joint],args.broken_p)   
