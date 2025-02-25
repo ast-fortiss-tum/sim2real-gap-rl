@@ -13,7 +13,7 @@ def load_data(file_path):
 
 def scale_data(data, scale=25):
     """Scale a list of 2D points by the given factor."""
-    return [[p[0]*scale, p[1]*scale] for p in data]
+    return [[p[0] * scale, p[1] * scale] for p in data]
 
 def compute_centerline_and_halfwidths(lanes):
     """
@@ -61,51 +61,88 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
       - The mean speed computed from consecutive "going" poses.
       - The maximum computed CTE observed during the run.
     
-    This function expects the poses JSON to contain keys "pose", "time", and "lanes", and the moving JSON
-    to contain keys "going" and "time". If any of these values are strings (as in your files), they are converted.
-    Additionally, all coordinate values are scaled by 25.
+    The poses JSON is expected to contain keys "pose", "time", and "lanes".
+    The moving JSON is expected to contain keys "going" and "time".
+    
+    Instead of assuming a one-to-one correspondence between poses and moving data, this function uses the
+    timestamps to decide which pose points fall within a "going" interval.
     """
-    # Load poses data
+    # --- Load poses data ---
     poses = poses_data.get("pose")
-    times = poses_data.get("time")
+    pose_times = poses_data.get("time")
     lanes = poses_data.get("lanes")
-    if poses is None or times is None or lanes is None:
+    if poses is None or pose_times is None or lanes is None:
         raise ValueError("Poses JSON must contain 'pose', 'time', and 'lanes'.")
-    if isinstance(times, str):
-        times = ast.literal_eval(times)
+    if isinstance(pose_times, str):
+        pose_times = ast.literal_eval(pose_times)
     poses = scale_data(poses)
     for i in range(len(lanes)):
         lanes[i] = scale_data(lanes[i])
     
-    # Load moving data
-    going = moving_data.get("going")
+    # --- Load moving data ---
+    going_raw = moving_data.get("going")
     moving_times = moving_data.get("time")
-    if going is None or moving_times is None:
+    if going_raw is None or moving_times is None:
         raise ValueError("Moving JSON must contain 'going' and 'time'.")
-    if isinstance(going, str):
-        going = ast.literal_eval(going)
+    if isinstance(going_raw, str):
+        going_raw = ast.literal_eval(going_raw)
     if isinstance(moving_times, str):
         moving_times = ast.literal_eval(moving_times)
     
-    n_points = min(len(poses), len(going))
-    
-    # Compute centerline and road center
+    # --- Build "going" intervals from moving.json ---
+    # If only one value is present or all values are True, then assume the interval spans
+    # from the first moving time to the last pose time.
+    intervals = []
+    n_moving = len(going_raw)
+    if n_moving == 0:
+        # No data; no intervals.
+        pass
+    elif n_moving == 1:
+        if going_raw[0]:
+            intervals.append((moving_times[0], pose_times[-1]))
+        # Else: always off (no interval)
+    else:
+        i = 0
+        while i < n_moving:
+            if going_raw[i]:
+                start = moving_times[i]
+                j = i + 1
+                # Continue as long as state is True.
+                while j < n_moving and going_raw[j]:
+                    j += 1
+                if j < n_moving:
+                    end = moving_times[j]
+                else:
+                    end = pose_times[-1]
+                intervals.append((start, end))
+                i = j
+            else:
+                i += 1
+
+    # --- Helper: Check if a given timestamp is within any "going" interval ---
+    def is_going(timestamp, intervals):
+        for start, end in intervals:
+            if start <= timestamp <= end:
+                return True
+        return False
+
+    # --- Compute centerline and road center ---
     centerline, half_widths = compute_centerline_and_halfwidths(lanes)
     all_points = lanes[0] + lanes[1]
     center_x = np.mean([pt[0] for pt in all_points])
     center_y = np.mean([pt[1] for pt in all_points])
     
-    # Determine a reference angle using the first sample where the agent is going.
+    # --- Determine reference angle using the first pose that is during a "going" interval ---
     ref_angle = None
-    for i in range(n_points):
-        if going[i]:
+    for i in range(len(poses)):
+        if is_going(pose_times[i], intervals):
             x0, y0 = poses[i]
             ref_angle = np.arctan2(y0 - center_y, x0 - center_x)
             break
     if ref_angle is None:
         ref_angle = 0
 
-    # Initialize accumulators.
+    # --- Initialize accumulators ---
     survival_turns = {thr: None for thr in survival_thresholds}
     safe_turns = {thr: 0.0 for thr in survival_thresholds}
     cumulative_turn = 0.0
@@ -114,19 +151,19 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
 
     total_speed = 0.0
     speed_count = 0
+    prev_going_idx = None  # index of the last pose that was "going"
 
-    i = 0
-
-    for i in range(n_points):
-        if not going[i]:
+    # --- Process each pose ---
+    for i in range(len(poses)):
+        # Process only if the pose's timestamp is within a "going" interval.
+        if not is_going(pose_times[i], intervals):
             prev_raw = None
             continue
 
         x, y = poses[i]
-        t = times[i]
+        t = pose_times[i]
         curr_cte = compute_computed_cte(x, y, centerline, half_widths)
-        i =+ 1
-        print(curr_cte, "  ", i)
+        #print(curr_cte, "  ", i)  # Debug print.
         max_cte = max(max_cte, curr_cte)
 
         # Compute turning angle relative to road center.
@@ -147,16 +184,17 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
                         safe_turns[thr] += abs(diff)
             prev_raw = current_raw
 
-        # Compute speed from previous going sample.
-        if i > 0 and going[i-1]:
-            x_prev, y_prev = poses[i-1]
-            dt = t - times[i-1]
+        # Compute speed using the previous "going" pose.
+        if prev_going_idx is not None:
+            dt = t - pose_times[prev_going_idx]
             if dt > 0:
+                x_prev, y_prev = poses[prev_going_idx]
                 dist = np.hypot(x - x_prev, y - y_prev)
                 total_speed += (dist / dt)
                 speed_count += 1
+        prev_going_idx = i
 
-        # For each survival threshold, if not yet recorded, check if computed CTE exceeds threshold.
+        # For each survival threshold, if not yet recorded, check if computed CTE exceeds the threshold.
         for thr in survival_thresholds:
             if survival_turns[thr] is None and curr_cte > thr:
                 survival_turns[thr] = cumulative_turn
@@ -186,16 +224,16 @@ def main():
     )
     parser.add_argument('--folder', type=str, default='/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/',
                         help="Folder containing run files (default: results_reality)")
-    parser.add_argument('--survival_thresholds', type=str, default='2.0,100.0,100.0',
+    parser.add_argument('--survival_thresholds', type=str, default='2.0,3.0,4.0',
                         help="Comma-separated list of survival CTE thresholds.")
-    parser.add_argument('--safe_threshold', type=float, default=10,
+    parser.add_argument('--safe_threshold', type=float, default=1.5,
                         help="CTE threshold below which turning is considered safe.")
     args = parser.parse_args()
 
     survival_thresholds = [float(val.strip()) for val in args.survival_thresholds.split(',') if val.strip()]
     folder = args.folder
 
-    # Find all runs by looking for files ending with '_poses.json'
+    # --- Find all runs by looking for files ending with '_poses.json'
     run_files = [f for f in os.listdir(folder) if f.endswith('_poses.json')]
     runs = {}
     for pf in run_files:
@@ -228,12 +266,32 @@ def main():
         print("No valid runs found in folder.")
         return
 
+    # --- Convert to DataFrame ---
     df = pd.DataFrame(results)
     df = df.sort_values("Run")
-    print("\nPerformance Table:")
+
+    # --- Group results by the first 17 characters of the run name ---
+    df["Group"] = df["Run"].apply(lambda x: x[:17])
+    # Define aggregation functions:
+    # - MeanSpeed: average,
+    # - MaxCTE: maximum,
+    # - For other columns (SurvivedDeg_* and SafePerc_*): average.
+    agg_funcs = {}
+    for col in df.columns:
+        if col == "Run" or col == "Group":
+            continue
+        elif col == "MaxCTE":
+            agg_funcs[col] = "max"
+        else:
+            agg_funcs[col] = "mean"
+    grouped_df = df.groupby("Group").agg(agg_funcs).reset_index()
+
+    print("\nIndividual Performance Table:")
     print(df.to_string(index=False))
+    print("\nGrouped Performance Table (by first 17 characters of run name):")
+    print(grouped_df.to_string(index=False))
     # Optionally, save to CSV:
-    # df.to_csv("performance_table.csv", index=False)
+    grouped_df.to_csv("performance_table_grouped.csv", index=False)
 
 if __name__ == '__main__':
     main()

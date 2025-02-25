@@ -61,44 +61,60 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
       - The mean speed computed from consecutive "going" poses.
       - The maximum computed CTE observed during the run.
     
-    This function expects the poses JSON to contain keys "pose", "time", and "lanes", and the moving JSON
-    to contain keys "going" and "time". If any of these values are strings (as in your files), they are converted.
-    Additionally, all coordinate values are scaled by 25.
+    The poses JSON is expected to contain keys "pose", "time", and "lanes".
+    The moving JSON is expected to contain keys "going" and "time".
+    
+    IMPORTANT: Instead of simply zipping the data points (which causes n_points = min(len(poses), len(going))
+    to be used), this function uses the timestamps to decide which pose points are within "going" intervals.
     """
-    # Load poses data
+    # Load poses data.
     poses = poses_data.get("pose")
-    times = poses_data.get("time")
+    pose_times = poses_data.get("time")
     lanes = poses_data.get("lanes")
-    if poses is None or times is None or lanes is None:
+    if poses is None or pose_times is None or lanes is None:
         raise ValueError("Poses JSON must contain 'pose', 'time', and 'lanes'.")
-    if isinstance(times, str):
-        times = ast.literal_eval(times)
+    if isinstance(pose_times, str):
+        pose_times = ast.literal_eval(pose_times)
     poses = scale_data(poses)
     for i in range(len(lanes)):
         lanes[i] = scale_data(lanes[i])
     
-    # Load moving data
-    going = moving_data.get("going")
+    # Load moving data.
+    going_raw = moving_data.get("going")
     moving_times = moving_data.get("time")
-    if going is None or moving_times is None:
+    if going_raw is None or moving_times is None:
         raise ValueError("Moving JSON must contain 'going' and 'time'.")
-    if isinstance(going, str):
-        going = ast.literal_eval(going)
+    if isinstance(going_raw, str):
+        going_raw = ast.literal_eval(going_raw)
     if isinstance(moving_times, str):
         moving_times = ast.literal_eval(moving_times)
     
-    n_points = min(len(poses), len(going))
+    # Build "going" intervals from moving.json.
+    # We assume the pattern is [True, False, True, False, ...] with corresponding timestamps.
+    intervals = []
+    for i in range(0, len(going_raw), 2):
+        if i+1 < len(going_raw):
+            # If a True is followed by a False, then the interval is from moving_times[i] to moving_times[i+1].
+            if going_raw[i] and (not going_raw[i+1]):
+                intervals.append((moving_times[i], moving_times[i+1]))
     
-    # Compute centerline and road center
+    def is_going(timestamp, intervals):
+        """Return True if timestamp falls in any going interval."""
+        for start, end in intervals:
+            if start <= timestamp <= end:
+                return True
+        return False
+    
+    # Compute centerline and road center.
     centerline, half_widths = compute_centerline_and_halfwidths(lanes)
     all_points = lanes[0] + lanes[1]
     center_x = np.mean([pt[0] for pt in all_points])
     center_y = np.mean([pt[1] for pt in all_points])
     
-    # Determine a reference angle using the first sample where the agent is going.
+    # Determine a reference angle using the first pose that falls within a "going" interval.
     ref_angle = None
-    for i in range(n_points):
-        if going[i]:
+    for i in range(len(poses)):
+        if is_going(pose_times[i], intervals):
             x0, y0 = poses[i]
             ref_angle = np.arctan2(y0 - center_y, x0 - center_x)
             break
@@ -114,22 +130,22 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
 
     total_speed = 0.0
     speed_count = 0
+    prev_going_idx = None  # Index of the last pose that was "going"
 
-    i = 0
-
-    for i in range(n_points):
-        if not going[i]:
+    # Iterate over all pose points.
+    for i in range(len(poses)):
+        # Process only if the pose timestamp is in a "going" interval.
+        if not is_going(pose_times[i], intervals):
             prev_raw = None
             continue
 
         x, y = poses[i]
-        t = times[i]
+        t = pose_times[i]
         curr_cte = compute_computed_cte(x, y, centerline, half_widths)
-        i =+ 1
-        print(curr_cte, "  ", i)
+        #print(curr_cte, "  ", i)  # Debug print.
         max_cte = max(max_cte, curr_cte)
 
-        # Compute turning angle relative to road center.
+        # Compute turning angle relative to the road center.
         current_angle = np.arctan2(y - center_y, x - center_x)
         current_raw = np.degrees(current_angle - ref_angle)
         if prev_raw is None:
@@ -147,16 +163,17 @@ def analyze_run(poses_data, moving_data, survival_thresholds, safe_threshold):
                         safe_turns[thr] += abs(diff)
             prev_raw = current_raw
 
-        # Compute speed from previous going sample.
-        if i > 0 and going[i-1]:
-            x_prev, y_prev = poses[i-1]
-            dt = t - times[i-1]
+        # Compute speed using the previous "going" pose.
+        if prev_going_idx is not None:
+            dt = t - pose_times[prev_going_idx]
             if dt > 0:
+                x_prev, y_prev = poses[prev_going_idx]
                 dist = np.hypot(x - x_prev, y - y_prev)
                 total_speed += (dist / dt)
                 speed_count += 1
+        prev_going_idx = i
 
-        # For each survival threshold, if not yet recorded, check if computed CTE exceeds threshold.
+        # For each survival threshold, if not yet recorded, check if computed CTE exceeds the threshold.
         for thr in survival_thresholds:
             if survival_turns[thr] is None and curr_cte > thr:
                 survival_turns[thr] = cumulative_turn
@@ -186,9 +203,9 @@ def main():
     )
     parser.add_argument('--folder', type=str, default='/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/',
                         help="Folder containing run files (default: results_reality)")
-    parser.add_argument('--survival_thresholds', type=str, default='2.0,100.0,100.0',
+    parser.add_argument('--survival_thresholds', type=str, default='2.0,3.0,4.0',
                         help="Comma-separated list of survival CTE thresholds.")
-    parser.add_argument('--safe_threshold', type=float, default=10,
+    parser.add_argument('--safe_threshold', type=float, default=2.0,
                         help="CTE threshold below which turning is considered safe.")
     args = parser.parse_args()
 
@@ -233,7 +250,7 @@ def main():
     print("\nPerformance Table:")
     print(df.to_string(index=False))
     # Optionally, save to CSV:
-    # df.to_csv("performance_table.csv", index=False)
+    df.to_csv("performance_table.csv", index=False)
 
 if __name__ == '__main__':
     main()
