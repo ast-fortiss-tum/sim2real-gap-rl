@@ -12,7 +12,7 @@ class DARC(ContSAC):
     def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device,savefolder,running_mean,
                  log_dir="latest_runs", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
-                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1,decay_rate = 0.99,max_steps = 200,if_normalize = False):
+                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1,decay_rate = 0.99,max_steps = 200,if_normalize = False,print_on = False):
         super(DARC, self).__init__(policy_config, value_config, source_env, device, log_dir,None,
                                    memory_size, None, batch_size, lr, gamma, tau,
                                    alpha, ent_adj, target_update_interval, None, n_updates_per_train)
@@ -44,6 +44,8 @@ class DARC(ContSAC):
         self.scheduler_critic = torch.optim.lr_scheduler.StepLR(self.twin_q_opt,step_size=1, gamma=decay_rate)
         self.scheduler_sa_classifier_opt = torch.optim.lr_scheduler.StepLR(self.sa_classifier_opt,step_size=1, gamma=decay_rate)
         self.scheduler_sas_adv_classifier_opt = torch.optim.lr_scheduler.StepLR(self.sas_adv_classifier_opt,step_size=1, gamma=decay_rate)
+
+        self.print_on = print_on
 
     def step_optim(self):
         self.scheduler_actor.step()
@@ -126,6 +128,7 @@ class DARC(ContSAC):
                 target_reward, target_step = self.simulate_env(i, "target", deterministic)
                 self.writer.add_scalar('Target Env/Rewards', target_reward, i)
                 self.writer.add_scalar('Target Env/N_Steps', target_step, i)
+
                 print("TARGET: index: {}, steps: {}, total_rewards: {}".format(i, target_step, target_reward))
 
             if i >= self.warmup_games:
@@ -145,6 +148,7 @@ class DARC(ContSAC):
                     print('src',self.eval_src(10))
                     print('tgt',self.eval_tgt(10))
                     self.save_model(str(i))
+
             print("SOURCE: index: {}, steps: {}, total_rewards: {}".format(i, source_step, source_reward))
 
     def simulate_env(self, game_count, env_name, deterministic):
@@ -170,6 +174,14 @@ class DARC(ContSAC):
             else:
                 action = self.get_action(state, deterministic)
             next_state, reward, done, _, _ = env.step(action)
+
+            if self.print_on:
+                print("state",state)
+                print("reward",reward)
+                print("done",done)
+                print("next_state",next_state)
+                print("action",action)
+
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
 
@@ -213,7 +225,7 @@ class DARC(ContSAC):
             torch.load(path + '/sas_adv_classifier', map_location=torch.device(device)))
         self.running_mean = pickle.load(open(path + '/running_mean', "rb"))
 
-    def eval_src(self, num_games, render=True):
+    def eval_src(self, num_games, render=False):
         self.policy.eval()
         self.twin_q.eval()
         reward_all = 0
@@ -241,7 +253,7 @@ class DARC(ContSAC):
             reward_all += total_reward
         return reward_all/num_games
     
-    def eval_tgt(self, num_games, render=True):
+    def eval_tgt(self, num_games, render=False):
         self.policy.eval()
         self.twin_q.eval()
         reward_all = 0

@@ -38,7 +38,7 @@ def parse_args():
                         help='File name to append to saved model path')
     parser.add_argument('--lr', type=float, default=1e-4,
                         help='Learning rate')
-    parser.add_argument('--bs', type=int, default=256,
+    parser.add_argument('--bs', type=int, default=12,
                         help='Batch size')
     parser.add_argument('--update', type=int, default=1,
                         help='Number of updates per training iteration')
@@ -173,13 +173,13 @@ def main():
         "output_activation": "none"
     }
 
-    running_state = ZFilter((state_dim,), clip=20)
+    running_state = ZFilter((state_dim,), clip=1)
     model = DARC(
         policy_config, value_config, sa_config, sas_config,
         source_env, target_env, "cpu", ent_adj=True,
         n_updates_per_train=args.update, lr=args.lr,
         max_steps=args.max_steps, batch_size=args.bs,
-        savefolder=save_model_path, running_mean=running_state,
+        savefolder=save_model_path, running_mean=None,
         if_normalize=args.normalize, delta_r_scale=args.deltar,
         noise_scale=args.noise, warmup_games=args.warmup
     )

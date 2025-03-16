@@ -71,20 +71,28 @@ class SmartGridBasic:
         # ----------------------------
         # Setup Data Providers
         # ----------------------------
-        ds1 = CSVDataSource(
+        d11 = CSVDataSource(
             self.data_path / 'LoadProfile.csv',
             delimiter=";",
             datetime_format="%d.%m.%Y %H:%M",
-            rename_dict={"time": "t", "H0-A_pload": "p", "H0-A_qload": "q"},
+            rename_dict={"time": "t", "G1-B_pload": "psib", "G1-C_pload": "psis", "G2-A_pload": "psi"},
             auto_drop=True,
             resample=timedelta(minutes=60)
+        )
+
+        ds1 = ConstantDataSource({
+            "psis": 0.08,  # the household gets payed 0.08 price units for each kWh exported to the external grid
+            "psib": 0.34  # the houshold pays 0.34 price units for each imported kWh
+            }, 
+            date_range=d11.get_date_range(), 
+            frequency=timedelta(minutes=60)
         )
 
         ds2 = CSVDataSource(
             self.data_path / 'LoadProfile.csv',
             delimiter=";",
             datetime_format="%d.%m.%Y %H:%M",
-            rename_dict={"time": "t", "G1-B_pload": "psib", "G1-C_pload": "psis", "G2-A_pload": "psi"},
+            rename_dict={"time": "t", "H0-A_pload": "p", "H0-A_qload": "q"},
             auto_drop=True,
             resample=timedelta(minutes=60)
         )
@@ -125,17 +133,8 @@ class SmartGridBasic:
             'd': (-15, 15)
         })"""
 
-        self.n1 = RTPricedBus("MultiFamilyHouse", {
-            'p': (-50, 50),
-            'q': (-50, 50),
-            'v': (0.95, 1.05),
-            'd': (-15, 15)
-        }).add_data_provider(self.dp2)
-
-        self.m1 = ExternalGrid("Grid1", {
-            'p': (-50, 50),
-            'q': (-50, 50)
-        })
+        self.n1 = RTPricedBus("Household").add_data_provider(self.dp1)
+        self.m1 = ExternalGrid("ExternalGrid")
         """
         self.m1 = TradingBusLinear("Trading1", {
             'p': (-50, 50),
@@ -149,7 +148,7 @@ class SmartGridBasic:
         self.e1 = self.define_e1()
 
         self.r1 = RenewableGen("PV1").add_data_provider(self.dp3)
-        self.d1 = Load("Load1").add_data_provider(self.dp1)
+        self.d1 = Load("Load1").add_data_provider(self.dp2)
 
         # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()).add_node(self.n1).add_node(self.m1)
