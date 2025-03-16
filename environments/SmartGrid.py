@@ -248,6 +248,92 @@ class SmartGrid_Nonlinear(SmartGridBasic):
             "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
 
+class SmartGrid_TwoHouses(SmartGridBasic):
+    def __init__(self, battery2_damaged=False, **kwargs):
+        """
+        Initializes the two-house smart grid environment.
+        
+        Parameters:
+            battery2_damaged (bool): If True, battery 2 will be simulated as damaged (with reduced efficiencies).
+            All additional keyword arguments are passed to the base SmartGridBasic initializer.
+            Must include 'params_battery' for battery parameters.
+        """
+        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
+            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_TwoHouses.")
+        self.params_battery = kwargs["params_battery"]
+        self.rho = self.params_battery["rho"]      # wear cost per kWh
+        self.p_lim = self.params_battery["p_lim"]    # power limits
+        self.capacity = kwargs.get("capacity", 3)    # energy storage capacity
+        # Save flag indicating whether battery 2 is damaged.
+        self.battery2_damaged = battery2_damaged
+        # Call the base initializer.
+        super().__init__(**kwargs)
+
+    def setup_system(self):
+        """
+        Setup a system with two households (each with a battery, PV, and load) connected to an ExternalGrid.
+        Battery 2 will be configured as damaged based on the self.battery2_damaged flag.
+        """
+        # --- Define Household Nodes ---
+        self.n1 = RTPricedBus("Household1").add_data_provider(self.dp1)
+        self.n2 = RTPricedBus("Household2").add_data_provider(self.dp1)
+        # Define the external grid node.
+        self.m1 = ExternalGrid("ExternalGrid")
+        
+        # --- Define Components for House 1 ---
+        battery1 = self.define_battery(1)
+        pv1 = RenewableGen("PV_house1").add_data_provider(self.dp3)
+        load1 = Load("Load_house1").add_data_provider(self.dp2)
+        self.n1.add_node(battery1).add_node(pv1).add_node(load1)
+        
+        # --- Define Components for House 2 ---
+        battery2 = self.define_battery(2)
+        pv2 = RenewableGen("PV_house2").add_data_provider(self.dp3)
+        load2 = Load("Load_house2").add_data_provider(self.dp2)
+        self.n2.add_node(battery2).add_node(pv2).add_node(load2)
+        
+        # --- Build the System ---
+        self.sys = System(power_flow_model=PowerBalanceModel()) \
+                    .add_node(self.n1) \
+                    .add_node(self.n2) \
+                    .add_node(self.m1)
+                    
+        # (Optional) Print the system structure.
+        self.sys.pprint()
+
+    def define_battery(self, house_index):
+        """
+        Helper method to define the battery for a given house.
+        If house_index is 2 and battery2_damaged is True, the efficiency values (etac, etad, etas) are set to 0.1.
+        
+        Parameters:
+            house_index (int): Identifier of the house (e.g., 1 or 2).
+            
+        Returns:
+            An instance of ESS representing the battery.
+        """
+        if house_index == 2 and self.battery2_damaged:
+            etac_used = 0.1
+            etad_used = 0.1
+            etas_used = 0.1
+            name = f"ESS_house{house_index}_damaged"
+        else:
+            etac_used = self.params_battery["etac"]
+            etad_used = self.params_battery["etad"]
+            etas_used = self.params_battery["etas"]
+            name = f"ESS_house{house_index}"
+        
+        return ESS(name, {
+            'rho': self.rho,
+            'p': (-self.p_lim, self.p_lim),
+            'q': (0, 0),
+            'etac': etac_used,
+            'etad': etad_used,
+            'etas': etas_used,
+            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
+            "soc_init": ConstantInitializer(0.2 * self.capacity)
+        })
+
 
 # =============================================================================
 # Usage Examples:
