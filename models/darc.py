@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.optim import Adam
+import time
 
 from architectures.utils import Model, gen_noise
 from replay_buffer import ReplayBuffer
@@ -38,7 +39,8 @@ class DARC(ContSAC):
 
         self.source_step = 0
         self.target_step = 0
-        self.source_memory = self.memory
+        #self.source_memory = self.memory
+        self.source_memory = ReplayBuffer(self.memory_size, self.batch_size)
         self.target_memory = ReplayBuffer(self.memory_size, self.batch_size)
         self.scheduler_actor = torch.optim.lr_scheduler.StepLR(self.policy_opt,step_size=1, gamma=decay_rate)
         self.scheduler_critic = torch.optim.lr_scheduler.StepLR(self.twin_q_opt,step_size=1, gamma=decay_rate)
@@ -164,9 +166,10 @@ class DARC(ContSAC):
         total_rewards = 0
         n_steps = 0
         done = False
-        state = env.reset()
+        state = env.reset()[0]
+    
         if self.if_normalize:
-            #print(state[0])
+            print(state[0])
             state = self.running_mean(state[0])
         while not done:
             if game_count <= self.warmup_games:
@@ -184,13 +187,22 @@ class DARC(ContSAC):
 
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
+            
+            print(env._max_episode_steps)
+            print(n_steps)
+            print("++++++++++++++++++++++++++")
 
-            done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else float(not done)
+            done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else 0.0
             if n_steps == self.max_steps:
                 done = True
 
-            memory.add(state, action, reward, next_state, done_mask)
+            #memory.add(state, action, reward, next_state, done_mask)
+            print("+++++++++++++", state[100],"+++++++++++++++++")
+            print("--------------", action ,"--------------------")
+            print("+++++++++++++", next_state[100],"+++++++++++++++++")
+            print("////////// Difference: ", state[100] + action -next_state[100], "//////////")
 
+            memory.add(state, action, reward, next_state, done_mask)
             if env_name == "source":
                 self.source_step += 1
             elif env_name == "target":

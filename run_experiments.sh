@@ -67,3 +67,4 @@ echo "---------------------------------------"
 
 # PENDING EDIT THE BUFFER TO PICK ONLY THE SOC AND NOT THE WHOLE STATE !!!!!!!
 # COULD BE NOT THAT DIRECT SINCE IT IS DEPENDING ON WHETHER THERE ARE TWO HOUSES OR NOT
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1111

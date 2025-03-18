@@ -18,7 +18,7 @@ def make_smartgrid_linear():
         fixed_start="27.11.2016",
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
-        params_battery={"rho": 0.1, "p_lim": 2.0}
+        params_battery={"rho": 0.1, "p_lim": 1.0}
     )
     # Set maximum episode steps.
     env_instance.env._max_episode_steps = 24
@@ -37,7 +37,7 @@ def make_smartgrid_nonlinear():
         fixed_start="27.11.2016",
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
-        params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 0.6, "etad": 0.7, "etas": 0.8}
+        params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 1.0, "etad": 1.0, "etas": 1.0}  #CHANGEEEEEE !!!!!!
     )
     env_instance.env._max_episode_steps = 24
     return env_instance.env

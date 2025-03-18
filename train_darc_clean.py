@@ -37,7 +37,7 @@ def parse_args():
     # Saving and training hyperparameters
     parser.add_argument('--save-model', type=str, default="",
                         help='Base path for saving the model')
-    parser.add_argument('--train-steps', type=int, default=4000,
+    parser.add_argument('--train-steps', type=int, default=1000,
                         help='Number of training steps')
     parser.add_argument('--max-steps', type=int, default=24,
                         help='Maximum steps per episode')
@@ -73,7 +73,7 @@ def parse_args():
                         help='Name of variety (s, c, d, v..., lc, lp)')
     parser.add_argument('--degree', type=float, default=0.5,
                         help='Degree parameter for variety (in (0,1])')
-    parser.add_argument('--noise', type=float, default=0.2,
+    parser.add_argument('--noise', type=float, default=0.0,
                         help='Noise scale')
 
     # Network architecture parameters
@@ -215,8 +215,8 @@ def main():
         source_env, target_env, "cpu", ent_adj=True,
         n_updates_per_train=args.update, lr=args.lr,
         max_steps=args.max_steps, batch_size=args.bs,
-        savefolder=save_model_path, running_mean=None,
-        if_normalize=True, delta_r_scale=args.deltar,
+        savefolder=save_model_path, running_mean=running_state ,
+        if_normalize=False, delta_r_scale=args.deltar,
         noise_scale=args.noise, warmup_games=args.warmup,
         log_dir=log_dir
     )

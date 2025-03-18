@@ -4,7 +4,7 @@ from environments.smartgrid_env import SmartGrid_Nonlinear
 def get_new_soc_env(degree, env_name):
     params_battery = {
         "rho": 0.1,
-        "p_lim": 2.0,
+        "p_lim": 1.0,
         "etac": 0.6,    # nominal charging efficiency
         "etad": 0.7,    # nominal discharging efficiency
         "etas": degree  # modified self-discharge efficiency
@@ -25,7 +25,7 @@ def get_new_soc_env(degree, env_name):
 def get_new_charge_env(degree, env_name):
     params_battery = {
         "rho": 0.1,
-        "p_lim": 2.0,
+        "p_lim": 1.0,
         "etac": degree, # modified charging efficiency
         "etad": 0.7,    
         "etas": 0.8     
@@ -46,7 +46,7 @@ def get_new_charge_env(degree, env_name):
 def get_new_discharge_env(degree, env_name):
     params_battery = {
         "rho": 0.1,
-        "p_lim": 2.0,
+        "p_lim": 1.0,
         "etac": 0.6,    
         "etad": degree, # modified discharging efficiency
         "etas": 0.8     
@@ -67,7 +67,7 @@ def get_new_discharge_env(degree, env_name):
 def get_new_all_eff_env(degree, env_name):
     params_battery = {
         "rho": 0.1,
-        "p_lim": 2.0,
+        "p_lim": 1.0,
         "etac": degree,
         "etad": degree,
         "etas": degree

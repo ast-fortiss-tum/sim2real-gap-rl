@@ -30,10 +30,13 @@ from commonpower.utils.helpers import get_adjusted_cost
 from commonpower.utils.param_initialization import *
 from commonpower.control.environments import ControlEnv   
 
+# =============================================================================
+# Base Class Definition
+# =============================================================================
 class SmartGridBasic:
     def __init__(self,
-                 rl = True,
-                 policy_path = None,
+                 rl=True,
+                 policy_path=None,
                  horizon=timedelta(hours=24),
                  frequency=timedelta(minutes=60),
                  fixed_start="27.11.2016",
@@ -42,19 +45,10 @@ class SmartGridBasic:
                  params_battery=None):
         """
         Initializes the SmartGrid environment with configurable parameters.
-        
-        Parameters:
-            horizon (timedelta): The time horizon of the forecast/control period.
-            frequency (timedelta): The time resolution for forecasting/control.
-            fixed_start (str): The fixed start date as a string (format: "%d.%m.%Y").
-            capacity (float): The energy storage capacity (e.g., in kWh).
-            data_path (str or pathlib.Path): Optional path to the data directory. 
-                If None, a default path is constructed.
-            params_battery (dict): A dictionary of battery parameters.
+        Only basic instance variables and objects are defined here.
+        To complete the setup, explicitly call setup_system() and setup_runner_trainer() as needed.
         """
-        # Set basic parameters.
         self.rl = rl
-
         self.horizon = horizon
         self.frequency = frequency
         self.fixed_start = fixed_start
@@ -81,10 +75,10 @@ class SmartGridBasic:
         )
 
         ds1 = ConstantDataSource({
-            "psis": 0.08,  # the household gets payed 0.08 price units for each kWh exported to the external grid
-            "psib": 0.34  # the houshold pays 0.34 price units for each imported kWh
-            }, 
-            date_range=d11.get_date_range(), 
+            "psis": 0.08,  # price units for kWh exported to the external grid
+            "psib": 0.34   # price units for kWh imported from the external grid
+            },
+            date_range=d11.get_date_range(),
             frequency=timedelta(minutes=60)
         )
 
@@ -119,48 +113,21 @@ class SmartGridBasic:
             pretrained_policy_path=policy_path
         )
         self.opt_controller = OptimalController("opt_ctrl")
-
-        # Call setup methods.
-        self.setup_system()
-        self.setup_runner_trainer(rl = self.rl)
+        # Note: The methods setup_system() and setup_runner_trainer() are intentionally not called here.
 
     def setup_system(self):
-        # --- Define Nodes ---
-        """self.n1 = Bus("MultiFamilyHouse", {
-            'p': (-50, 50),
-            'q': (-50, 50),
-            'v': (0.95, 1.05),
-            'd': (-15, 15)
-        })"""
-
+        # --- Define Nodes and Components (for a single household, not used in two-house grid) ---
         self.n1 = RTPricedBus("Household").add_data_provider(self.dp1)
         self.m1 = ExternalGrid("ExternalGrid")
-        """
-        self.m1 = TradingBusLinear("Trading1", {
-            'p': (-50, 50),
-            'q': (-50, 50)
-        }).add_data_provider(self.dp2)
-        
-        """
-
-        # --- Define Components ---
-        # Create the energy storage system using the subclass's definition.
         self.e1 = self.define_e1()
-
         self.r1 = RenewableGen("PV1").add_data_provider(self.dp3)
         self.d1 = Load("Load1").add_data_provider(self.dp2)
-
-        # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()).add_node(self.n1).add_node(self.m1)
         self.n1.add_node(self.d1).add_node(self.e1).add_node(self.r1)
-
-        # CHANGE ORDERRRRR SO THAT STATE[0] == SOC !!!!!!!
-
-        # (Optional) Print the system structure.
         self.sys.pprint()
 
-    def setup_runner_trainer(self, rl = True):
-        # --- Setup the Trainer ---
+    def setup_runner_trainer(self, rl=True):
+        # --- Setup the Trainer or Runner ---
         if rl:
             self.runner = None
             self.trainer = BaseTrainer(
@@ -173,7 +140,6 @@ class SmartGridBasic:
             self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
             self.trainer.prepare_run()
             self.env = self.trainer.env
-
         else:
             self.trainer = False
             self.runner = BaseRunner(
@@ -187,132 +153,57 @@ class SmartGridBasic:
             self.env_opt = self.runner.env
 
     def define_e1(self):
-        """
-        Abstract method to define the energy storage system (ESS).
-        Subclasses must override this method to specify their particular ESS implementation.
-        """
         raise NotImplementedError("Subclasses must implement define_e1()")
 
-
 # =============================================================================
-# Subclass for a linear energy storage system.
+# Two-House Smart Grid Subclass
 # =============================================================================
-class SmartGrid_Linear(SmartGridBasic):
-    def __init__(self, **kwargs):
-        # Ensure battery parameters are provided.
-        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
-            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_Linear.")
-        # Set battery-specific attributes before calling the base class constructor.
-        self.params_battery = kwargs["params_battery"]
-        self.rho = self.params_battery["rho"]      # wear cost per kWh
-        self.p_lim = self.params_battery["p_lim"]    # power limits
-        
-        # Now call the base class constructor.
-        super().__init__(**kwargs)
-
-    def define_e1(self):
-        # Define the energy storage system (ESS) for the linear case.
-        return ESSLinear("ESS1", {
-            'rho': self.rho,
-            'p': (-self.p_lim, self.p_lim),
-            'q': (0, 0),
-            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
-            "soc_init": ConstantInitializer(0.2 * self.capacity)
-        })
-
-# =============================================================================
-# Subclass for a nonlinear energy storage system.
-# =============================================================================
-class SmartGrid_Nonlinear(SmartGridBasic):
-    def __init__(self, **kwargs):
-        # Ensure battery parameters are provided.
-        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
-            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_Nonlinear.")
-        # Set battery-specific attributes before calling the base class constructor.
-        self.params_battery = kwargs["params_battery"]
-        self.rho = self.params_battery["rho"]      # wear cost per kWh
-        self.p_lim = self.params_battery["p_lim"]    # power limits
-        self.etac = self.params_battery["etac"]      # charging efficiency
-        self.etad = self.params_battery["etad"]      # discharging efficiency
-        self.etas = self.params_battery["etas"]      # self-discharge
-        super().__init__(**kwargs)
-
-    def define_e1(self):
-        # Define the energy storage system (ESS) for the nonlinear case.
-        return ESS("ESS", {
-            'rho': self.rho,
-            'p': (-self.p_lim, self.p_lim),
-            'q': (0, 0),
-            'etac': self.etac,
-            'etad': self.etad,
-            'etas': self.etas,
-            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
-            "soc_init": ConstantInitializer(0.2 * self.capacity)
-        })
-
 class SmartGrid_TwoHouses(SmartGridBasic):
     def __init__(self, battery2_damaged=False, **kwargs):
         """
         Initializes the two-house smart grid environment.
-        
-        Parameters:
-            battery2_damaged (bool): If True, battery 2 will be simulated as damaged (with reduced efficiencies).
-            All additional keyword arguments are passed to the base SmartGridBasic initializer.
-            Must include 'params_battery' for battery parameters.
+        Only sets up instance variables. To build the full system,
+        call setup_system() explicitly after initialization.
         """
         if "params_battery" not in kwargs or kwargs["params_battery"] is None:
             raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_TwoHouses.")
         self.params_battery = kwargs["params_battery"]
-        self.rho = self.params_battery["rho"]      # wear cost per kWh
-        self.p_lim = self.params_battery["p_lim"]    # power limits
-        self.capacity = kwargs.get("capacity", 3)    # energy storage capacity
-        # Save flag indicating whether battery 2 is damaged.
+        self.rho = self.params_battery["rho"]
+        self.p_lim = self.params_battery["p_lim"]
+        self.capacity = kwargs.get("capacity", 3)
         self.battery2_damaged = battery2_damaged
-        # Call the base initializer.
         super().__init__(**kwargs)
 
     def setup_system(self):
         """
-        Setup a system with two households (each with a battery, PV, and load) connected to an ExternalGrid.
-        Battery 2 will be configured as damaged based on the self.battery2_damaged flag.
+        Setup a system with two households (each with a battery, PV, and load)
+        connected to an ExternalGrid. Battery 2 is configured as damaged if indicated.
         """
-        # --- Define Household Nodes ---
         self.n1 = RTPricedBus("Household1").add_data_provider(self.dp1)
         self.n2 = RTPricedBus("Household2").add_data_provider(self.dp1)
-        # Define the external grid node.
         self.m1 = ExternalGrid("ExternalGrid")
         
-        # --- Define Components for House 1 ---
         battery1 = self.define_battery(1)
         pv1 = RenewableGen("PV_house1").add_data_provider(self.dp3)
         load1 = Load("Load_house1").add_data_provider(self.dp2)
         self.n1.add_node(battery1).add_node(pv1).add_node(load1)
         
-        # --- Define Components for House 2 ---
         battery2 = self.define_battery(2)
         pv2 = RenewableGen("PV_house2").add_data_provider(self.dp3)
         load2 = Load("Load_house2").add_data_provider(self.dp2)
         self.n2.add_node(battery2).add_node(pv2).add_node(load2)
         
-        # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()) \
                     .add_node(self.n1) \
                     .add_node(self.n2) \
                     .add_node(self.m1)
                     
-        # (Optional) Print the system structure.
         self.sys.pprint()
 
     def define_battery(self, house_index):
         """
         Helper method to define the battery for a given house.
-        If house_index is 2 and battery2_damaged is True, the efficiency values (etac, etad, etas) are set to 0.1.
-        
-        Parameters:
-            house_index (int): Identifier of the house (e.g., 1 or 2).
-            
-        Returns:
-            An instance of ESS representing the battery.
+        If house_index is 2 and battery2_damaged is True, reduced efficiencies are used.
         """
         if house_index == 2 and self.battery2_damaged:
             etac_used = 0.1
@@ -336,30 +227,39 @@ class SmartGrid_TwoHouses(SmartGridBasic):
             "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
 
+    # We still need to define define_e1 even though it is not used in this subclass.
+    def define_e1(self):
+        raise NotImplementedError("SmartGrid_TwoHouses uses define_battery() for battery definition.")
+
 
 # =============================================================================
-# Usage Examples:
+# Main Execution: Set Up a Two-House Grid
 # =============================================================================
-"""
-# Define battery parameters in a dictionary.
-battery_params = {
-    "rho": 0.1,
-    "p_lim": 1.5,
-    "etac": 0.95,
-    "etad": 0.95,
-    "etas": 0.99
-}
+def main():
+    # Define battery parameters.
+    params_battery = {
+        "rho": 0.01,    # wear cost per kWh
+        "p_lim": 5,     # power limit
+        "etac": 0.95,   # charging efficiency
+        "etad": 0.95,   # discharging efficiency
+        "etas": 0.99    # self-discharge rate
+    }
+    
+    # Create the SmartGrid_TwoHouses instance.
+    grid = SmartGrid_TwoHouses(
+        params_battery=params_battery,
+        fixed_start="27.11.2016",
+        horizon=timedelta(hours=24),
+        frequency=timedelta(minutes=60),
+        capacity=3,
+        battery2_damaged=True  # Set True to simulate a damaged battery for household 2.
+    )
+    
+    # Explicitly set up the system and runner/trainer.
+    grid.setup_system()
+    grid.setup_runner_trainer(rl=True)
+    
+    print("SmartGrid_TwoHouses grid has been set up successfully.")
 
-# Instantiate the linear smart grid with default parameters.
-smartgrid_env_linear = SmartGrid_Linear(params_battery=battery_params).env
-
-# Or, instantiate with custom parameters:
-smartgrid_env_linear_custom = SmartGrid_Linear(
-    horizon=timedelta(hours=12),
-    frequency=timedelta(minutes=30),
-    fixed_start="01.01.2020",
-    capacity=5,
-    data_path="/path/to/your/data",
-    params_battery=battery_params
-).env
-"""
+if __name__ == '__main__':
+    main()
