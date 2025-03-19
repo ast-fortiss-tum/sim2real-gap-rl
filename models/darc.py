@@ -69,8 +69,19 @@ class DARC(ContSAC):
             t_next_states = torch.as_tensor(t_next_states, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
-            sa_inputs = torch.cat([s_states, s_actions], 1)
-            sas_inputs = torch.cat([s_states, s_actions, s_next_states], 1)
+            #print("CCC: ", s_states.shape, s_actions.shape, s_next_states.shape)
+            #print("YOLO:  ", s_states[:, 100], s_actions[:, 0], s_next_states[:, 100])
+            # Use unsqueeze to keep the feature dimension (batch, 1)
+            sa_inputs = torch.cat([
+                s_states[:, 100].unsqueeze(1), 
+                s_actions[:, 0].unsqueeze(1)
+            ], dim=1)
+            #print("sa_inputs: ", sa_inputs)
+            sas_inputs = torch.cat([
+                s_states[:, 100].unsqueeze(1), 
+                s_actions[:, 0].unsqueeze(1), 
+                s_next_states[:, 100].unsqueeze(1)
+            ], dim=1)
             sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
             sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
@@ -81,11 +92,91 @@ class DARC(ContSAC):
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
 
         train_info = super(DARC, self).train_step(s_states, s_actions, s_rewards, s_next_states, s_done_masks)
+        # Implementation of the classifier using only the 100-th element for each sample:
+        s_sa_inputs = torch.cat([
+            s_states[:, 100].unsqueeze(1),
+            s_actions[:, 0].unsqueeze(1)
+        ], dim=1)
+        s_sas_inputs = torch.cat([
+            s_states[:, 100].unsqueeze(1),
+            s_actions[:, 0].unsqueeze(1),
+            s_next_states[:, 100].unsqueeze(1)
+        ], dim=1)
+        t_sa_inputs = torch.cat([
+            t_states[:, 100].unsqueeze(1),
+            t_actions[:, 0].unsqueeze(1)
+        ], dim=1)
+        t_sas_inputs = torch.cat([
+            t_states[:, 100].unsqueeze(1),
+            t_actions[:, 0].unsqueeze(1),
+            t_next_states[:, 100].unsqueeze(1)
+        ], dim=1)
+        
+        s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale, s_sa_inputs, self.device))
+        s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale, s_sas_inputs, self.device))
+        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale, t_sa_inputs, self.device))
+        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale, t_sas_inputs, self.device))
 
-        s_sa_inputs = torch.cat([s_states, s_actions], 1)
-        s_sas_inputs = torch.cat([s_states, s_actions, s_next_states], 1)
-        t_sa_inputs = torch.cat([t_states, t_actions], 1)
-        t_sas_inputs = torch.cat([t_states, t_actions, t_next_states], 1)
+        loss_function = nn.CrossEntropyLoss()
+        label_zero = torch.zeros((s_sa_logits.shape[0],), dtype=torch.int64).to(self.device)
+        label_one = torch.ones((t_sa_logits.shape[0],), dtype=torch.int64).to(self.device)
+        classify_loss = loss_function(s_sa_logits, label_zero)
+        classify_loss += loss_function(t_sa_logits, label_one)
+        classify_loss += loss_function(s_sas_logits, label_zero)
+        classify_loss += loss_function(t_sas_logits, label_one)
+
+        self.sa_classifier_opt.zero_grad()
+        self.sas_adv_classifier_opt.zero_grad()
+        classify_loss.backward()
+        self.sa_classifier_opt.step()
+        self.sas_adv_classifier_opt.step()
+
+        s_sa_acc = 1 - torch.argmax(s_sa_logits, dim=1).double().mean()
+        s_sas_acc = 1 - torch.argmax(s_sas_logits, dim=1).double().mean()
+        t_sa_acc = torch.argmax(t_sa_logits, dim=1).double().mean()
+        t_sas_acc = torch.argmax(t_sas_logits, dim=1).double().mean()
+
+        train_info['Loss/Classify Loss'] = classify_loss
+        train_info['Stats/Avg Delta Reward'] = delta_r.mean()
+        train_info['Stats/Avg Source SA Acc'] = s_sa_acc
+        train_info['Stats/Avg Source SAS Acc'] = s_sas_acc
+        train_info['Stats/Avg Target SA Acc'] = t_sa_acc
+        train_info['Stats/Avg Target SAS Acc'] = t_sas_acc
+        return train_info
+
+    def train_stepOLD(self, s_states, s_actions, s_rewards, s_next_states, s_done_masks, *args):
+        t_states, t_actions, _, t_next_states, _, game_count = args
+        if not torch.is_tensor(s_states):
+            s_states = torch.as_tensor(s_states, dtype=torch.float32).to(self.device)
+            s_actions = torch.as_tensor(s_actions, dtype=torch.float32).to(self.device)
+            s_rewards = torch.as_tensor(s_rewards[:, np.newaxis], dtype=torch.float32).to(self.device)
+            s_next_states = torch.as_tensor(s_next_states, dtype=torch.float32).to(self.device)
+            s_done_masks = torch.as_tensor(s_done_masks[:, np.newaxis], dtype=torch.float32).to(self.device)
+
+            t_states = torch.as_tensor(t_states, dtype=torch.float32).to(self.device)
+            t_actions = torch.as_tensor(t_actions, dtype=torch.float32).to(self.device)
+            t_next_states = torch.as_tensor(t_next_states, dtype=torch.float32).to(self.device)
+
+        with torch.no_grad():
+            sa_inputs = torch.cat([s_states, s_actions[:,0]], 0)
+
+            sas_inputs = torch.cat([s_states[:,100], s_actions[:,0], s_next_states[:,100]], 0)
+            sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
+            sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
+            sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
+            sas_log_probs = torch.log(torch.softmax(sas_logits + sa_logits, dim=1) + 1e-12)
+
+            delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
+            if game_count >= 2 * self.warmup_games:
+                s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
+
+        train_info = super(DARC, self).train_step(s_states, s_actions, s_rewards, s_next_states, s_done_masks)
+        #HERE IMPLEMENTATION OF THE CLASSIFIER STATE[100]
+
+        s_sa_inputs = torch.cat([s_states[:,100], s_actions[:,0]], 0)
+        s_sas_inputs = torch.cat([s_states[:,100], s_actions[:,0], s_next_states[:,100]], 0)
+        t_sa_inputs = torch.cat([t_states[:,100], t_actions[:,0]], 0)
+        t_sas_inputs = torch.cat([t_states[:,100], t_actions[:,0], t_next_states[:,100]], 0)
         s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale, s_sa_inputs, self.device))
         s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale, s_sas_inputs, self.device))
         t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale, t_sa_inputs, self.device))
@@ -188,21 +279,20 @@ class DARC(ContSAC):
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
             
-            print(env._max_episode_steps)
-            print(n_steps)
-            print("++++++++++++++++++++++++++")
+            #print(env._max_episode_steps)
+            #print(n_steps)
+            #print("++++++++++++++++++++++++++")
 
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else 0.0
             if n_steps == self.max_steps:
                 done = True
 
-            #memory.add(state, action, reward, next_state, done_mask)
-            print("+++++++++++++", state[100],"+++++++++++++++++")
-            print("--------------", action ,"--------------------")
-            print("+++++++++++++", next_state[100],"+++++++++++++++++")
-            print("////////// Difference: ", state[100] + action -next_state[100], "//////////")
-
             memory.add(state, action, reward, next_state, done_mask)
+            #print("+++++++++++++", state[100],"+++++++++++++++++")
+            #print("--------------", action ,"--------------------")
+            #print("+++++++++++++", next_state[100],"+++++++++++++++++")
+            #print("////////// Difference: ", state[100] + action -next_state[100], "//////////")
+
             if env_name == "source":
                 self.source_step += 1
             elif env_name == "target":

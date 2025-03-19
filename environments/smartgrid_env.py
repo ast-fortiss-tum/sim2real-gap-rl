@@ -21,6 +21,8 @@ def make_smartgrid_linear():
         params_battery={"rho": 0.1, "p_lim": 1.0}
     )
     # Set maximum episode steps.
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -39,6 +41,8 @@ def make_smartgrid_nonlinear():
         data_path="./data/1-LV-rural2--1-sw",
         params_battery={"rho": 0.1, "p_lim": 2.0, "etac": 1.0, "etad": 1.0, "etas": 1.0}  #CHANGEEEEEE !!!!!!
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -65,6 +69,8 @@ def make_smartgrid_twohouses_normal():
         battery2_damaged=False
     )
     # Set maximum episode steps.
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -80,7 +86,7 @@ def make_smartgrid_twohouses_damaged_battery():
         frequency=timedelta(minutes=60),
         fixed_start="27.11.2016",
         capacity=3,
-        data_path="./data/1-LV-rural2--1-sw",
+        #data_path="./data/1-LV-rural2--1-sw",
         params_battery={
             "rho": 0.1, 
             "p_lim": 2.0, 
@@ -91,6 +97,8 @@ def make_smartgrid_twohouses_damaged_battery():
         battery2_damaged=True
     )
     # Set maximum episode steps.
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 

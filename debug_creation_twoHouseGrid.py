@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 import gymnasium as gym
+from gymnasium.envs.registration import register
 
 import pathlib
 import matplotlib.pyplot as plt
@@ -158,6 +159,99 @@ class SmartGridBasic:
 # =============================================================================
 # Two-House Smart Grid Subclass
 # =============================================================================
+class SmartGrid_AggregatedHouses(SmartGridBasic):
+    def __init__(self, battery2_damaged=False, **kwargs):
+        """
+        Initializes the smart grid with two houses aggregated in one node.
+        
+        Parameters:
+            battery2_damaged (bool): If True, the battery for house 2 is simulated as damaged.
+            Additional keyword arguments are passed to SmartGridBasic.
+        """
+        # Save flag indicating whether battery 2 is damaged.
+        self.battery2_damaged = battery2_damaged
+
+        # Ensure battery parameters are provided.
+        if "params_battery" not in kwargs or kwargs["params_battery"] is None:
+            raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_AggregatedHouses.")
+        self.params_battery = kwargs["params_battery"]
+        self.rho = self.params_battery["rho"]      # wear cost per kWh
+        self.p_lim = self.params_battery["p_lim"]    # power limits
+        
+        # Call the base initializer.
+        super().__init__(**kwargs)
+
+    def setup_system(self):
+        """
+        Builds the grid with an aggregated node containing two houses and an external grid.
+        """
+        # --- Define the Aggregated Node ---
+        # Here we use an EnergyCommunity, a StructureNode that aggregates subordinate buses.
+        self.aggregated_node = EnergyCommunity("AggregatedHouseholds")
+        self.aggregated_node.add_data_provider(self.dp1)
+
+        # --- Define House 1 as a Bus ---
+        house1 = RTPricedBus("Household1").add_data_provider(self.dp1)
+        battery1 = self.define_battery(1)
+        pv1 = RenewableGen("PV_house1").add_data_provider(self.dp3)
+        load1 = Load("Load_house1").add_data_provider(self.dp2)
+        house1.add_node(battery1).add_node(pv1).add_node(load1)
+        
+        # --- Define House 2 as a Bus ---
+        house2 = RTPricedBus("Household2").add_data_provider(self.dp1)
+        battery2 = self.define_battery(2)
+        pv2 = RenewableGen("PV_house2").add_data_provider(self.dp3)
+        load2 = Load("Load_house2").add_data_provider(self.dp2)
+        house2.add_node(battery2).add_node(pv2).add_node(load2)
+        
+        # Add both houses to the aggregated (community) node.
+        self.aggregated_node.add_node(house1)
+        self.aggregated_node.add_node(house2)
+        
+        # --- Define the External Grid ---
+        self.m1 = ExternalGrid("ExternalGrid")
+        
+        # --- Build the System ---
+        # The system now has two top-level nodes: the aggregated households and the external grid.
+        self.sys = System(power_flow_model=PowerBalanceModel()) \
+                    .add_node(self.aggregated_node) \
+                    .add_node(self.m1)
+        
+        # (Optional) Print the system structure.
+        self.sys.pprint()
+
+    def define_battery(self, house_index):
+        """
+        Helper method to define a battery (ESS) for a given house.
+        
+        Parameters:
+            house_index (int): Identifier of the house (1 or 2).
+            
+        Returns:
+            An instance of ESS representing the battery.
+        """
+        if house_index == 2 and self.battery2_damaged:
+            etac_used = 0.1
+            etad_used = 0.1
+            etas_used = 0.1
+            name = f"ESS_house{house_index}_damaged"
+        else:
+            etac_used = self.params_battery["etac"]
+            etad_used = self.params_battery["etad"]
+            etas_used = self.params_battery["etas"]
+            name = f"ESS_house{house_index}"
+        
+        return ESS(name, {
+            'rho': self.rho,
+            'p': (-self.p_lim, self.p_lim),
+            'q': (0, 0),
+            'etac': etac_used,
+            'etad': etad_used,
+            'etas': etas_used,
+            'soc': (0.1 * self.capacity, 0.9 * self.capacity),
+            "soc_init": ConstantInitializer(0.2 * self.capacity)
+        })
+
 class SmartGrid_TwoHouses(SmartGridBasic):
     def __init__(self, battery2_damaged=False, **kwargs):
         """
@@ -231,7 +325,33 @@ class SmartGrid_TwoHouses(SmartGridBasic):
     def define_e1(self):
         raise NotImplementedError("SmartGrid_TwoHouses uses define_battery() for battery definition.")
 
-
+def make_smartgrid_twohouses_damaged_battery():
+    """
+    Factory function to create a SmartGrid_TwoHouses environment with battery 2 damaged.
+    Returns a gym.Env instance (ControlEnv) configured via SmartGrid_TwoHouses.
+    """
+    env_instance = SmartGrid_AggregatedHouses(
+        rl=True,
+        policy_path=None,
+        horizon=timedelta(hours=24),
+        frequency=timedelta(minutes=60),
+        fixed_start="27.11.2016",
+        capacity=3,
+        #data_path="./data/1-LV-rural2--1-sw",
+        params_battery={
+            "rho": 0.1, 
+            "p_lim": 2.0, 
+            "etac": 0.6, 
+            "etad": 0.7, 
+            "etas": 0.8
+        },
+        battery2_damaged=True
+    )
+    # Set maximum episode steps.
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
+    env_instance.env._max_episode_steps = 24
+    return env_instance.env
 # =============================================================================
 # Main Execution: Set Up a Two-House Grid
 # =============================================================================
@@ -258,8 +378,47 @@ def main():
     # Explicitly set up the system and runner/trainer.
     grid.setup_system()
     grid.setup_runner_trainer(rl=True)
+    print(grid.env)
     
     print("SmartGrid_TwoHouses grid has been set up successfully.")
+
+        # Define battery parameters.
+    params_battery = {
+        "rho": 0.01,    # wear cost per kWh
+        "p_lim": 5,     # power limit
+        "etac": 0.95,   # charging efficiency
+        "etad": 0.95,   # discharging efficiency
+        "etas": 0.99    # self-discharge rate
+    }
+    
+    # Create the SmartGrid_TwoHouses instance.
+    grid = SmartGrid_AggregatedHouses(
+        params_battery=params_battery,
+        fixed_start="27.11.2016",
+        horizon=timedelta(hours=24),
+        frequency=timedelta(minutes=60),
+        capacity=3,
+        battery2_damaged=True  # Set True to simulate a damaged battery for household 2.
+    )
+    
+    # Explicitly set up the system and runner/trainer.
+    grid.setup_system()
+    grid.setup_runner_trainer(rl=True)
+    print(grid.env)
+    
+    print("SmartGrid_TwoHouses ADVANCED grid has been set up successfully.")
+
+# ============================================================================= 
+# Entry Point
+# =============================================================================
+    
+    register(
+        id='Smart_Grids_TwoHouses_Damage-v0',
+        entry_point='debug_creation_twoHouseGrid:make_smartgrid_twohouses_damaged_battery',
+        max_episode_steps=24,
+    )
+
+    gym.make('Smart_Grids_TwoHouses_Damage-v0')
 
 if __name__ == '__main__':
     main()

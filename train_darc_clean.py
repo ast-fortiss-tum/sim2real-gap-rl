@@ -3,7 +3,7 @@ import gymnasium as gym
 from datetime import datetime, timedelta
 from models.darc import DARC
 from utils import ZFilter
-from get_customized_envs import (get_new_soc_env, get_new_charge_env, 
+from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
                    get_new_discharge_env, get_new_all_eff_env, 
                    get_new_limited_capacity_env, get_new_limited_plim_env)
 import argparse
@@ -81,7 +81,7 @@ def parse_args():
                         help='Size of policy network layers')
     parser.add_argument('--classifier', type=int, default=32,
                         help='Size of classifier network layers')
-    parser.add_argument('--warmup', type=int, default=50,
+    parser.add_argument('--warmup', type=int, default=2,
                         help='Number of warmup steps')
 
     return parser.parse_args()
@@ -191,7 +191,8 @@ def main():
         "output_activation": "none"
     }
     sa_config = {
-        "input_dim": [state_dim + action_dim],
+        #"input_dim": [state_dim + action_dim],
+        "input_dim": [1 + action_dim],
         "architecture": [
             {"name": "linear1", "size": args.classifier},
             {"name": "linear2", "size": 2}
@@ -200,7 +201,8 @@ def main():
         "output_activation": "none"
     }
     sas_config = {
-        "input_dim": [state_dim * 2 + action_dim],
+        #"input_dim": [state_dim * 2 + action_dim],
+        "input_dim": [2 + action_dim],
         "architecture": [
             {"name": "linear1", "size": args.classifier},
             {"name": "linear2", "size": 2}

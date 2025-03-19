@@ -19,6 +19,8 @@ def get_new_soc_env(degree, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -40,6 +42,8 @@ def get_new_charge_env(degree, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -61,6 +65,8 @@ def get_new_discharge_env(degree, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -82,6 +88,8 @@ def get_new_all_eff_env(degree, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -108,6 +116,8 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
@@ -134,5 +144,7 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim, env_name):
         data_path="./data/1-LV-rural2--1-sw",
         params_battery=params_battery
     )
+    env_instance.setup_system()
+    env_instance.setup_runner_trainer(rl=True)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
