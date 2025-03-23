@@ -3,6 +3,7 @@ import gymnasium as gym
 from datetime import datetime, timedelta
 from models.darc import DARC, DARC_two
 from models.sac import ContSAC
+from models.mpc import MPC
 from utils import ZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
                    get_new_discharge_env, get_new_all_eff_env, 
@@ -296,6 +297,13 @@ def main():
 
     model_vanilla.train(int(args.train_steps/10), deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
+
+    mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
+
+    ############ TEST ####################
+    mpc = MPC(target_env, save_dir=mpc_save_model_path,seed=args.seed)
+    mpc.train()
+    #Save is automatic with run in mpc
 
 if __name__ == '__main__':
     main()

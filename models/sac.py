@@ -13,7 +13,6 @@ from architectures.utils import polyak_update
 from replay_buffer import ReplayBuffer
 from tensor_writer import TensorWriter
 
-# TODO Discrete
 class ContSAC:
     def __init__(self, policy_config, value_config, env, device, log_dir="latest_runs", running_mean=None,
                  memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, tau=0.003, alpha=0.2,
