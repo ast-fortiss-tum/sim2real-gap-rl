@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from models.darc import DARC, DARC_two
 from models.sac import ContSAC
 from models.mpc import MPC
-from utils import ZFilter
+from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
                    get_new_discharge_env, get_new_all_eff_env, 
                    get_new_limited_capacity_env, get_new_limited_plim_env, get_twoHouses_env,
@@ -248,7 +248,8 @@ def main():
         "output_activation": "none"
     }
 
-    running_state = ZFilter((state_dim,), clip=1)
+    running_state = ZFilter((state_dim,), clip=20)
+    #running_state = EMAZFilter((state_dim,), clip=20)
 
     # Instantiate DARC (or DARC_two) using the constructed paths.
     if args.broken == 0:

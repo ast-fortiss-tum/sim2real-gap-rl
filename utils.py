@@ -296,3 +296,79 @@ class ZFilter:
             x = np.clip(x, -self.clip, self.clip)
         return x
 
+########### NEW ##############
+
+class EMAStat(object):
+    def __init__(self, shape, alpha=0.1):
+        """
+        Initializes the EMA statistics.
+        
+        Args:
+            shape (tuple): The shape of the data.
+            alpha (float): The update rate for the EMA.
+        """
+        self.alpha = alpha
+        self.mean = np.zeros(shape)
+        self.var = np.zeros(shape)
+        self.initialized = False
+
+    def update(self, x):
+        """
+        Update the running mean and variance using an exponential moving average.
+        
+        Args:
+            x (np.array): New sample data.
+        """
+        x = np.asarray(x)
+        if not self.initialized:
+            self.mean = x.copy()
+            self.var = np.zeros_like(x)
+            self.initialized = True
+        else:
+            # Update EMA for the mean
+            self.mean = (1 - self.alpha) * self.mean + self.alpha * x
+            # Update EMA for the variance based on the new mean
+            self.var = (1 - self.alpha) * self.var + self.alpha * np.square(x - self.mean)
+
+class EMAZFilter:
+    """
+    Normalizes input data using exponential moving averages for mean and variance.
+    
+    This filter subtracts the EMA mean and divides by the EMA standard deviation.
+    It can also clip the normalized output to a specified range.
+    """
+    def __init__(self, shape, alpha=0.1, demean=True, destd=True, clip=10.0):
+        """
+        Args:
+            shape (tuple): Shape of the data.
+            alpha (float): Update rate for the EMA.
+            demean (bool): Whether to subtract the mean.
+            destd (bool): Whether to divide by the standard deviation.
+            clip (float): Value to clip the normalized output.
+        """
+        self.demean = demean
+        self.destd = destd
+        self.clip = clip
+        self.ema_stat = EMAStat(shape, alpha=alpha)
+
+    def __call__(self, x, update=True):
+        """
+        Normalize the input data.
+        
+        Args:
+            x (np.array): The input data.
+            update (bool): Whether to update the running statistics with x.
+            
+        Returns:
+            np.array: The normalized data.
+        """
+        x = np.asarray(x)
+        if update:
+            self.ema_stat.update(x)
+        if self.demean:
+            x = x - self.ema_stat.mean
+        if self.destd:
+            x = x / (np.sqrt(self.ema_stat.var) + 1e-8)
+        if self.clip:
+            x = np.clip(x, -self.clip, self.clip)
+        return x
