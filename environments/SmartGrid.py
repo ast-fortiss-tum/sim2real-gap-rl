@@ -39,12 +39,14 @@ class SmartGridBasic:
                  fixed_start="27.11.2016",
                  capacity=3,
                  data_path=None,
+                 seed=42,
                  params_battery=None):
         """
         Initializes the SmartGrid environment with configurable parameters.
         Only basic instance variables and objects are defined here.
         To complete the setup, explicitly call setup_system() and setup_runner_trainer() as needed.
         """
+        self.seed = seed
         self.rl = rl
         self.horizon = horizon
         self.frequency = frequency
@@ -127,6 +129,7 @@ class SmartGridBasic:
         if rl:
             self.runner = None
             self.trainer = BaseTrainer(
+                seed=self.seed,
                 sys=self.sys,
                 global_controller=self.agent1,
                 wrapper=SingleAgentWrapper,
@@ -139,6 +142,7 @@ class SmartGridBasic:
         else:
             self.trainer = False
             self.runner = BaseRunner(
+                seed=self.seed,
                 sys=self.sys,
                 global_controller=self.opt_controller,
                 forecast_horizon=self.horizon,
@@ -171,7 +175,6 @@ class SmartGrid_Linear(SmartGridBasic):
             'soc': (0.1 * self.capacity, 0.9 * self.capacity),
             "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
-
 
 # =============================================================================
 # Subclass for a nonlinear energy storage system.

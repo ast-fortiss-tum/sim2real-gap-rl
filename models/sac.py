@@ -3,6 +3,7 @@ import pickle
 
 import numpy as np
 import torch
+import random
 from torch.nn import functional
 from torch.optim import Adam
 
@@ -12,13 +13,16 @@ from architectures.utils import polyak_update
 from replay_buffer import ReplayBuffer
 from tensor_writer import TensorWriter
 
-
-
 # TODO Discrete
 class ContSAC:
-    def __init__(self, policy_config, value_config, env, device, log_dir="latest_runs",running_mean = None,
+    def __init__(self, policy_config, value_config, env, device, log_dir="latest_runs", running_mean=None,
                  memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, tau=0.003, alpha=0.2,
-                 ent_adj=False, target_update_interval=1, n_games_til_train=1, n_updates_per_train=1,max_steps = 200):
+                 ent_adj=False, target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, max_steps=200,
+                 seed=None):
+        # Set the global seed if provided for reproducibility
+        if seed is not None:
+            set_global_seed(seed)
+        
         self.device = device
         self.gamma = gamma
         self.batch_size = batch_size
@@ -197,3 +201,12 @@ class ContSAC:
         polyak_update(self.twin_q, self.target_twin_q, 1)
         self.running_mean = pickle.load(open(path + '/running_mean', "rb"))
 
+def set_global_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    # For additional determinism in CUDA (may slow down training)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
