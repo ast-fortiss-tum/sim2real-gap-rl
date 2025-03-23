@@ -44,17 +44,7 @@ class SmartGridBasic:
         Initializes the SmartGrid environment with configurable parameters.
         Only basic instance variables and objects are defined here.
         To complete the setup, explicitly call setup_system() and setup_runner_trainer() as needed.
-
-        Parameters:
-            horizon (timedelta): The time horizon of the forecast/control period.
-            frequency (timedelta): The time resolution for forecasting/control.
-            fixed_start (str): The fixed start date as a string (format: "%d.%m.%Y").
-            capacity (float): The energy storage capacity (e.g., in kWh).
-            data_path (str or pathlib.Path): Optional path to the data directory. 
-                If None, a default path is constructed.
-            params_battery (dict): A dictionary of battery parameters.
         """
-        # Set basic parameters.
         self.rl = rl
         self.horizon = horizon
         self.frequency = frequency
@@ -82,10 +72,10 @@ class SmartGridBasic:
         )
 
         ds1 = ConstantDataSource({
-            "psis": 0.08,  # the household gets paid 0.08 price units for each kWh exported to the external grid
-            "psib": 0.34   # the household pays 0.34 price units for each imported kWh
-            }, 
-            date_range=d11.get_date_range(), 
+            "psis": 0.08,  # price units for kWh exported to the external grid
+            "psib": 0.34   # price units for kWh imported from the external grid
+            },
+            date_range=d11.get_date_range(),
             frequency=timedelta(minutes=60)
         )
 
@@ -120,25 +110,16 @@ class SmartGridBasic:
             pretrained_policy_path=policy_path
         )
         self.opt_controller = OptimalController("opt_ctrl")
-        
-        # Note: The methods setup_system() and setup_runner_trainer() are intentionally not called here.
-        # They should be called explicitly after instantiation if desired.
 
     def setup_system(self):
-        # --- Define Nodes ---
+        # --- Define Nodes and Components (for a single household, not used in two-house grid) ---
         self.n1 = RTPricedBus("Household").add_data_provider(self.dp1)
         self.m1 = ExternalGrid("ExternalGrid")
-
-        # --- Define Components ---
         self.e1 = self.define_e1()
         self.r1 = RenewableGen("PV1").add_data_provider(self.dp3)
         self.d1 = Load("Load1").add_data_provider(self.dp2)
-
-        # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()).add_node(self.n1).add_node(self.m1)
         self.n1.add_node(self.d1).add_node(self.e1).add_node(self.r1)
-
-        # (Optional) Print the system structure.
         self.sys.pprint()
 
     def setup_runner_trainer(self, rl=True):
@@ -168,12 +149,7 @@ class SmartGridBasic:
             self.env_opt = self.runner.env
 
     def define_e1(self):
-        """
-        Abstract method to define the energy storage system (ESS).
-        Subclasses must override this method to specify their particular ESS implementation.
-        """
         raise NotImplementedError("Subclasses must implement define_e1()")
-
 
 # =============================================================================
 # Subclass for a linear energy storage system.
@@ -234,10 +210,6 @@ class SmartGrid_TwoHouses(SmartGridBasic):
         Initializes the two-house smart grid environment.
         Only sets up instance variables. To build the full system,
         call setup_system() explicitly after initialization.
-        
-        Parameters:
-            battery2_damaged (bool): If True, battery 2 will be simulated as damaged (with reduced efficiencies).
-            Additional keyword arguments (must include 'params_battery') are passed to the base initializer.
         """
         if "params_battery" not in kwargs or kwargs["params_battery"] is None:
             raise ValueError("The 'params_battery' parameter must be provided for SmartGrid_TwoHouses.")
@@ -253,42 +225,31 @@ class SmartGrid_TwoHouses(SmartGridBasic):
         Setup a system with two households (each with a battery, PV, and load)
         connected to an ExternalGrid. Battery 2 is configured as damaged if indicated.
         """
-        # --- Define Household Nodes ---
         self.n1 = RTPricedBus("Household1").add_data_provider(self.dp1)
         self.n2 = RTPricedBus("Household2").add_data_provider(self.dp1)
         self.m1 = ExternalGrid("ExternalGrid")
         
-        # --- Define Components for House 1 ---
         battery1 = self.define_battery(1)
         pv1 = RenewableGen("PV_house1").add_data_provider(self.dp3)
         load1 = Load("Load_house1").add_data_provider(self.dp2)
         self.n1.add_node(battery1).add_node(pv1).add_node(load1)
         
-        # --- Define Components for House 2 ---
         battery2 = self.define_battery(2)
         pv2 = RenewableGen("PV_house2").add_data_provider(self.dp3)
         load2 = Load("Load_house2").add_data_provider(self.dp2)
         self.n2.add_node(battery2).add_node(pv2).add_node(load2)
         
-        # --- Build the System ---
         self.sys = System(power_flow_model=PowerBalanceModel()) \
                     .add_node(self.n1) \
                     .add_node(self.n2) \
                     .add_node(self.m1)
                     
-        # (Optional) Print the system structure.
         self.sys.pprint()
 
     def define_battery(self, house_index):
         """
-        Defines the battery for a given house.
+        Helper method to define the battery for a given house.
         If house_index is 2 and battery2_damaged is True, reduced efficiencies are used.
-        
-        Parameters:
-            house_index (int): Identifier of the house (1 or 2).
-            
-        Returns:
-            An ESS instance representing the battery.
         """
         if house_index == 2 and self.battery2_damaged:
             etac_used = 0.1
@@ -311,3 +272,7 @@ class SmartGrid_TwoHouses(SmartGridBasic):
             'soc': (0.1 * self.capacity, 0.9 * self.capacity),
             "soc_init": ConstantInitializer(0.2 * self.capacity)
         })
+
+    # We still need to define define_e1 even though it is not used in this subclass.
+    def define_e1(self):
+        raise NotImplementedError("SmartGrid_TwoHouses uses define_battery() for battery definition.")

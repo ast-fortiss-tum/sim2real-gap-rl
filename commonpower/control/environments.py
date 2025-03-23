@@ -116,6 +116,10 @@ class ControlEnv(gym.Env):
         obs, costs, terminated, truncated, info = self.sys.step(
             rl_action_callback=self.rl_action_callback, history=self.system_history
         )
+
+        #soc_value = obs['agent1']['n0.el01']['soc'][0]
+        #print("SOC after layer safety:  ", soc_value)  # Output: 0.1
+
         # extract only the info for the RL controllers
         obs = {agent: agent_obs for agent, agent_obs in obs.items() if agent in self.controllers.keys()}
         # rewards are negative costs
@@ -127,6 +131,7 @@ class ControlEnv(gym.Env):
         if terminated:
             self.train_history = {agent_id: copy(agent.history) for agent_id, agent in self.controllers.items()}
             for agent_id in self.controllers.keys():
+
                 self.episode_history[agent_id].append(
                     {
                         "mean_penalty": np.mean([t[1] for t in self.train_history[agent_id]["safety_penalty"]]),

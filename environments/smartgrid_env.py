@@ -1,6 +1,7 @@
 from datetime import timedelta
 from environments.SmartGrid import *
 
+# UNUSED SCRIPT
 # -----------------------------------------------------------------------------
 # Factory functions to create the environments.
 # -----------------------------------------------------------------------------

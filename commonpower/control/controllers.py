@@ -631,6 +631,7 @@ class RLBaseController(BaseController):
         if self.train:
             if input_callback is None:
                 raise ValueError("Need to provide an action callback in training mode!")
+
             action = input_callback(self.name)
             verified_action, action_corrected, safety_penalty = self.safety_layer.compute_safe_action(action)
             # clip actions to bounds to account for numerical errors

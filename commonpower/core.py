@@ -487,6 +487,13 @@ class System(ControllableModelEntity):
             dict: additional information
 
         """
+        ###############################
+        self.verified_actions = {}
+        self.verification_penalties = {}
+
+        ###############################
+
+
         # write actions into model instance
         penalties = {}
         for ctrl_id, ctrl in self.controllers.items():
@@ -495,13 +502,23 @@ class System(ControllableModelEntity):
             verified_action, verification_penalty = ctrl.compute_control_input(
                 obs=ctrl_obs, input_callback=rl_action_callback
             )
+            self.verified_actions[ctrl_id] = verified_action
+
             penalties[ctrl_id] = verification_penalty  # will be 0 for optimal controllers, dummy controllers
+            
+            self.verification_penalties[ctrl_id] = verification_penalty
             # fix computed inputs in model instance
             nodes = ctrl.get_nodes()
             for node in nodes:
                 if node.id in verified_action.keys():
                     node_actions = verified_action[node.id]
                     node.fix_inputs(node_actions)
+
+        #print("***************************")
+        #print(rl_action_callback)
+        #print(verified_action)
+        #print(verification_penalty)
+        #print("***************************")
 
         # step the model (corresponding to the environment)
         inst = self.instance

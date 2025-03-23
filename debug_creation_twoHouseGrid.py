@@ -379,6 +379,9 @@ def main():
     grid.setup_system()
     grid.setup_runner_trainer(rl=True)
     print(grid.env)
+    print("+++++++++++++++++++++++")
+    grid.trainer.system_feasible()
+    print("+++++++++++++++++++++++")
     
     print("SmartGrid_TwoHouses grid has been set up successfully.")
 
