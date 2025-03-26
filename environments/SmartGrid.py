@@ -18,7 +18,7 @@ from commonpower.core import System, Node, Bus
 from commonpower.models.busses import *
 from commonpower.models.components import *
 from commonpower.models.powerflow import *
-from commonpower.control.controllers import RLControllerSB3, OptimalController, RLBaseController
+from commonpower.control.controllers import RLControllerSB3, OptimalController, RLBaseController, RLControllerSAC_Customized
 from commonpower.control.safety_layer.safety_layers import ActionProjectionSafetyLayer
 from commonpower.control.safety_layer.penalties import *
 from commonpower.control.runners import BaseTrainer, BaseRunner, DeploymentRunner
@@ -106,7 +106,7 @@ class SmartGridBasic:
         # ----------------------------
         # Setup Controller and System
         # ----------------------------
-        self.agent1 = RLControllerSB3(
+        self.agent1 = RLControllerSAC_Customized(
             name='agent1',
             safety_layer=ActionProjectionSafetyLayer(penalty=DistanceDependingPenalty(penalty_factor=0.001)),
             pretrained_policy_path=policy_path

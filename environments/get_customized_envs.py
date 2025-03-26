@@ -21,7 +21,7 @@ def get_simple_linear_env(seed, rl = True):
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_new_soc_env(degree,seed, rl = True):
     params_battery = {
@@ -46,7 +46,7 @@ def get_new_soc_env(degree,seed, rl = True):
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     print(env_instance.env)
-    return env_instance.env
+    return env_instance
 
 def get_new_charge_env(degree,seed, rl = True):
     params_battery = {
@@ -70,7 +70,7 @@ def get_new_charge_env(degree,seed, rl = True):
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_new_discharge_env(degree,seed, rl = True):
     params_battery = {
@@ -94,7 +94,7 @@ def get_new_discharge_env(degree,seed, rl = True):
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_new_all_eff_env(degree,seed, rl = True):
     params_battery = {
@@ -118,7 +118,7 @@ def get_new_all_eff_env(degree,seed, rl = True):
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     """
@@ -146,7 +146,7 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     """
@@ -175,7 +175,7 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     env_instance.setup_system()
     env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
-    return env_instance.env
+    return env_instance
 
 def get_twoHouses_env(damaged_battery,seed, rl = True):
     # Define battery parameters.
@@ -205,4 +205,4 @@ def get_twoHouses_env(damaged_battery,seed, rl = True):
     
     print("SmartGrid_TwoHouses grid has been set up successfully.")
 
-    return env_instance.env
+    return env_instance

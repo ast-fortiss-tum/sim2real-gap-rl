@@ -3,7 +3,7 @@
 # This script runs the training script for multiple combinations of Smart Grid settings.
 
 # Common parameters
-TRAIN_STEPS=120   # Number of GAMESS !!!
+TRAIN_STEPS=200   # Number of GAMESS !!!
 LR=0.0008
 MAX_STEPS=24
 BS=12
@@ -23,7 +23,7 @@ echo "Starting experiments for Smart Grids..."
 # (i) Degree-based experiments: for varieties that use a degree (e.g., s, c, d, v)
 for lin_src in 0 1; do
   for variety in v; do
-    for degree in 0.1 0.5 0.8; do
+    for degree in 0.2 0.5 0.8; do
       for noise in 0 1; do
         echo "-----------------------------------------------------"
         echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"

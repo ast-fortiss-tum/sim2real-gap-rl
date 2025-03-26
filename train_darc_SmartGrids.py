@@ -159,54 +159,46 @@ def main():
     if args.broken == 0:
         # One-house setting with variety modifications.
         if args.lin_src == 1:
-            source_env = get_simple_linear_env(args.seed)
+            source_env = get_simple_linear_env(args.seed).env
             if args.variety_name == 's':
-                target_env = get_new_soc_env(args.degree, args.seed)
-                target_env_mpc = get_new_soc_env(args.degree, args.seed, rl = False)
+                target_env = get_new_soc_env(args.degree, args.seed).env
             elif args.variety_name == 'c':
-                target_env = get_new_charge_env(args.degree, args.seed)
-                target_env_mpc = get_new_charge_env(args.degree, args.seed, rl=False)
+                target_env = get_new_charge_env(args.degree, args.seed).env
             elif args.variety_name == 'd':
-                target_env = get_new_discharge_env(args.degree, args.seed)
-                target_env_mpc = get_new_discharge_env(args.degree, args.seed, rl=False)
+                target_env = get_new_discharge_env(args.degree, args.seed).env
             elif args.variety_name.startswith('v'):
-                target_env = get_new_all_eff_env(args.degree, args.seed)
-                target_env_mpc = get_new_all_eff_env(args.degree, args.seed, rl=False)
+                target_env = get_new_all_eff_env(args.degree, args.seed).env
             elif args.variety_name == 'lc':
-                target_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed)
-                target_env_mpc = get_new_limited_capacity_env(args.capacity, 1.5, args.seed, rl=False)
+                target_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed).env
             elif args.variety_name == 'lp':
-                target_env = get_new_limited_plim_env(3, args.p_lim, args.seed)
-                target_env_mpc = get_new_limited_plim_env(3, args.p_lim, args.seed, rl=False)
+                target_env = get_new_limited_plim_env(3, args.p_lim, args.seed).env
             else:
                 raise ValueError("Unknown variety name: " + args.variety_name)
         else:
-            target_env = get_simple_linear_env(args.seed)
-            target_env_mpc = get_simple_linear_env(args.seed, rl=False)
+            target_env = get_simple_linear_env(args.seed).env
             if args.variety_name == 's':
-                source_env = get_new_soc_env(args.degree, args.seed)
+                source_env = get_new_soc_env(args.degree, args.seed).env
             elif args.variety_name == 'c':
-                source_env = get_new_charge_env(args.degree, args.seed)
+                source_env = get_new_charge_env(args.degree, args.seed).env
             elif args.variety_name == 'd':
-                source_env = get_new_discharge_env(args.degree, args.seed)
+                source_env = get_new_discharge_env(args.degree, args.seed).env
             elif args.variety_name.startswith('v'):
-                source_env = get_new_all_eff_env(args.degree, args.seed)
+                source_env = get_new_all_eff_env(args.degree, args.seed).env
             elif args.variety_name == 'lc':
-                source_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed)
+                source_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed).env
             elif args.variety_name == 'lp':
-                source_env = get_new_limited_plim_env(3, args.p_lim, args.seed)
+                source_env = get_new_limited_plim_env(3, args.p_lim, args.seed).env
             else:
                 raise ValueError("Unknown variety name: " + args.variety_name)
     else:
         # Two-house setting (broken environment).
         if args.break_src == 1:
-            source_env = get_twoHouses_env(damaged_battery=True, seed=args.seed)
-            target_env = get_twoHouses_env(damaged_battery=False, seed=args.seed)
-            target_env_mpc = get_twoHouses_env(damaged_battery=False, seed=args.seed, rl=False)
+            source_env = get_twoHouses_env(damaged_battery=True, seed=args.seed).env
+            target_env = get_twoHouses_env(damaged_battery=False, seed=args.seed).env
         else:
-            source_env = get_twoHouses_env(damaged_battery=False, seed=args.seed)
-            target_env = get_twoHouses_env(damaged_battery=True, seed=args.seed)
-            target_env_mpc = get_twoHouses_env(damaged_battery=True, seed=args.seed, rl=False)
+            source_env = get_twoHouses_env(damaged_battery=False, seed=args.seed).env
+            target_env = get_twoHouses_env(damaged_battery=True, seed=args.seed).env
+
 
     # Get dimensions from the source environment.
     state_dim = source_env.observation_space.shape[0]
@@ -308,10 +300,8 @@ def main():
     model_vanilla.train(int(args.train_steps/10), deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
 
-    mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
-
-    ############ TEST ####################
-
+    ############ NO NECESSARY ####################
+    #mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
     #mpc = MPC(target_env_mpc, save_dir=mpc_save_model_path,seed=args.seed)
     #mpc.train()
     #Save is automatic with run in mpc

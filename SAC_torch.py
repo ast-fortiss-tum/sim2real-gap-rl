@@ -80,9 +80,9 @@ class CustomContGaussianPolicy(SACPolicy):
 
     def _build(self, lr_schedule: Schedule) -> None:
         # Build the custom actor network
-        #self.actor = ContGaussianPolicy(self.model_config, self.action_range)
-        model_path = "/home/cubos98/Desktop/MA/DARAIL/saved_weights/_02/SmartGrids/25_0.0001_Smart_Grids/100/policy.pth"
-        state_dict = torch.load(model_path, weights_only=True)  #.pth
+        self.actor = ContGaussianPolicy(self.model_config, self.action_range)
+        #model_path = "/home/cubos98/Desktop/MA/DARAIL/saved_weights/_02/SmartGrids/25_0.0001_Smart_Grids/100/policy.pth"
+        #state_dict = torch.load(model_path, weights_only=True)  #.pth
 
         # If your file was saved as a dictionary containing a key like "state_dict",
         # then extract it. Otherwise, assume the file is directly the state dictionary.
