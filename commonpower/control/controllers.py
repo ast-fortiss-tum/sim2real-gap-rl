@@ -893,3 +893,163 @@ class RLControllerMA(RLBaseController):
             self.policy_kwargs.use_centralized_V = False
         else:
             raise NotImplementedError
+        
+
+################## NEW CODE ##################
+import os
+import pickle
+import torch
+import numpy as np
+
+class RLControllerSAC_CustomizedOld(RLBaseController):
+    """
+    Controller class for RL agents trained with SAC-based algorithms.
+    Provides save, load, and action prediction functionality analogous to the
+    RLControllerSB3 implementation.
+    """
+    def __init__(self, name, safety_layer, sac_model=None, load_path: str = None):
+        """
+        Initialize the controller with an existing SAC model instance or None.
+        
+        Args:
+            sac_model: An instance of your SAC-based model (e.g., ContSAC or DARC).
+            load_path (str): Optional path from which to load a pre-trained model.
+        """
+        super().__init__(name=name, safety_layer=safety_layer)
+        self.sac_model = sac_model  # Your SAC model instance
+        self.load_path = load_path
+
+    def save(self, save_path: str):
+        """
+        Save the SAC model's policy, twin Q-network, and running mean filter.
+        
+        Args:
+            save_path (str): Directory where to save the model.
+        """
+        if self.sac_model is None:
+            raise ValueError("No SAC model instance available to save!")
+        os.makedirs(save_path, exist_ok=True)
+        torch.save(self.sac_model.policy.state_dict(), os.path.join(save_path, 'policy'))
+        torch.save(self.sac_model.twin_q.state_dict(), os.path.join(save_path, 'twin_q_net'))
+        with open(os.path.join(save_path, 'running_mean.pkl'), 'wb') as f:
+            pickle.dump(self.sac_model.running_mean, f)
+        print(f"SAC model saved to {save_path}")
+
+    def load(self, env, config):
+        """
+        Load a pre-trained SAC model from the specified load_path.
+        This method requires that self.load_path is set and that a model instance
+        has been created with the correct architecture.
+        
+        Args:
+            env: The environment to be used (needed to construct the model architecture).
+            device (str): Device on which to load the model.
+        """
+        device = "cpu"
+        if not self.load_path:
+            raise ValueError("No load path provided for pre-trained policy!")
+        # It is assumed that self.sac_model was created already with the proper config.
+        self.sac_model.load_model(self.load_path, device)
+        self.policy = self.sac_model.policy
+        print(f"SAC model loaded from {self.load_path}")
+
+    def predict_action(self, obs: np.ndarray, deterministic: bool = True) -> np.ndarray:
+        """
+        Compute the control action based on a given observation by propagating it
+        through the SAC model's policy network.
+        
+        Args:
+            obs (np.ndarray): The current observation.
+            deterministic (bool): If True, use deterministic action selection.
+        
+        Returns:
+            np.ndarray: The computed action.
+        """
+        # The SAC model already implements get_action
+        return self.sac_model.get_action(obs, deterministic=deterministic)
+
+class RLControllerSAC_Customized(RLBaseController):
+    """
+    Controller class for SAC-based agents.
+    This version is independent of an external sac_model or env.
+    It creates its own policy and twin Q networks using the provided configurations.
+    """
+    def save(self, save_path: str):
+        """
+        Save the model's policy, twin Q-network, and running mean filter.
+
+        Args:
+            save_path (str): Directory where the model components are saved.
+        """
+        os.makedirs(save_path, exist_ok=True)
+        torch.save(self.policy.state_dict(), os.path.join(save_path, 'policy'))
+        torch.save(self.twin_q.state_dict(), os.path.join(save_path, 'twin_q_net'))
+        with open(os.path.join(save_path, 'running_mean.pkl'), 'wb') as f:
+            pickle.dump(self.running_mean, f)
+        print(f"SAC model saved to {save_path}")
+
+    def load(self, env, config):
+        """
+        Load a pre-trained SAC model from the specified load_path.
+        The input is now structured to accept both an environment and a configuration dictionary.
+        This method also updates the algorithm configuration with the action range from the env.
+
+        Args:
+            env: The environment instance. Its action space is used to update the configuration.
+            config (dict): The algorithm configuration dictionary (self.alg_config).
+        """
+        self.device = config.device
+        self.load_path = config.load_path
+        # Environment will be set later via load() if needed.
+        self.env = None
+        
+        # Instantiate the policy and twin Q networks using provided configurations.
+        self.policy = config.policy
+        self.twin_q = config.twin_q
+        self.target_twin_q = config.target_twin_q
+        self.running_mean = config.running_mean
+        #polyak_update(self.twin_q, self.target_twin_q, 1)
+
+        # The running mean filter will be loaded or set externally.
+        self.running_mean = None
+        if not self.load_path:
+            raise ValueError("No load path provided for pre-trained policy!")
+        
+        # Update environment and action_range from the provided env.
+        self.env = env
+        #config['action_range'] = (env.action_space.low, env.action_space.high)
+        self.alg_config = config
+
+        # Load model weights.
+        self.policy.load_state_dict(
+            torch.load(os.path.join(self.load_path, 'policy'), map_location=torch.device(self.device), weights_only=True)
+        )
+        self.twin_q.load_state_dict(
+            torch.load(os.path.join(self.load_path, 'twin_q_net'), map_location=torch.device(self.device), weights_only=True)
+        )
+        with open(os.path.join(self.load_path, 'running_mean'), 'rb') as f:
+            self.running_mean = pickle.load(f)
+        
+        # Update the target twin Q network.
+        #polyak_update(self.twin_q, self.target_twin_q, 1)
+        print(f"SAC model loaded from {self.load_path}")
+
+    def predict_action(self, obs: np.ndarray, deterministic: bool = True) -> np.ndarray:
+        """
+        Compute the control action based on the given observation.
+
+        Args:
+            obs (np.ndarray): The current observation.
+            deterministic (bool): If True, use deterministic action selection.
+
+        Returns:
+            np.ndarray: The computed action.
+        """
+        with torch.no_grad():
+            state = torch.as_tensor(obs[np.newaxis, :].copy(), dtype=torch.float32).to(self.device)
+            # The policy's sample method is expected to have the signature: sample(state, transform)
+            if deterministic:
+                _, _, action = self.policy.sample(state, False)
+            else:
+                action, _, _ = self.policy.sample(state, False)
+            return action.detach().cpu().numpy()[0]

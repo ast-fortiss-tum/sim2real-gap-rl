@@ -21,7 +21,7 @@ from commonpower.models.powerflow import *
 from commonpower.control.controllers import RLControllerSB3, OptimalController, RLBaseController
 from commonpower.control.safety_layer.safety_layers import ActionProjectionSafetyLayer
 from commonpower.control.safety_layer.penalties import *
-from commonpower.control.runners import BaseTrainer, BaseRunner
+from commonpower.control.runners import BaseTrainer, BaseRunner, DeploymentRunner
 from commonpower.control.wrappers import SingleAgentWrapper
 from commonpower.control.logging.loggers import *
 from commonpower.control.configs.algorithms import *
@@ -141,7 +141,7 @@ class SmartGridBasic:
             self.env = self.trainer.env
         else:
             self.trainer = False
-            self.runner = BaseRunner(
+            self.runner = DeploymentRunner(
                 seed=self.seed,
                 sys=self.sys,
                 global_controller=self.opt_controller,
@@ -150,7 +150,7 @@ class SmartGridBasic:
             )
             self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
             self.runner.prepare_run()
-            self.env_opt = self.runner.env
+            self.env = self.runner.env
 
     def define_e1(self):
         raise NotImplementedError("Subclasses must implement define_e1()")

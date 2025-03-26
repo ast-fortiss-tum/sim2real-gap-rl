@@ -17,8 +17,9 @@ from commonpower.control.configs.algorithms import *
 from commonpower.data_forecasting import *
 from commonpower.utils.helpers import get_adjusted_cost
 from commonpower.utils.param_initialization import *
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 import tensorboard
+import time
 
 n_hours = 24
 horizon = timedelta(hours=n_hours)
@@ -185,6 +186,7 @@ rl_deployer = DeploymentRunner(
 )
 # Finally, we can simulate the system with the trained controller for the given day
 rl_deployer.run(n_steps=24, fixed_start=fixed_start)
+
 # let us extract some logs for comparison with an optimal controller
 # We want to compare the cost of the household over the curse of the day. 
 rl_power_import_cost = rl_model_history.get_history_for_element(m1, name='cost') # cost for buying electricity
@@ -205,6 +207,9 @@ oc_deployer = DeploymentRunner(
 )
 
 oc_deployer.run(n_steps=24, fixed_start=fixed_start)
+print(oc_deployer.controllers)
+
+time.sleep(20)
 # we retrieve logs for the system cost
 oc_power_import_cost = oc_model_history.get_history_for_element(m1, name='cost') # cost for buying electricity
 oc_dispatch_cost = oc_model_history.get_history_for_element(n1, name='cost') # cost for operating the components in the household

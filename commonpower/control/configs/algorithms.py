@@ -103,3 +103,16 @@ class MAPPOBaseConfig(BaseModel):
     ifi: float = 0.1
     # args from Commonpower
     penalty_factor: float = 0.0
+
+class ContSACConfig(BaseModel):
+    policy_config: dict
+    value_config: dict
+    action_range: tuple
+    device: str
+    load_path: str = None
+    running_mean: object
+    policy: object
+    twin_q: object
+    target_twin_q: object
+    algorithm: None
+    seed: int

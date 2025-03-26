@@ -14,6 +14,9 @@ from gymnasium.envs.registration import register
 import os
 import time
 
+# Import wrappers for vectorized environments and normalization.
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+
 # -----------------------------------------------------------------------------
 # Registration of the Smart Grid environments with Gymnasium.
 # -----------------------------------------------------------------------------
@@ -30,7 +33,7 @@ def parse_args():
     # Saving and training hyperparameters
     parser.add_argument('--save-model', type=str, default="",
                         help='Base path for saving the model')
-    parser.add_argument('--train-steps', type=int, default=24*5,
+    parser.add_argument('--train-steps', type=int, default=24*30,
                         help='Number of training steps')
     parser.add_argument('--max-steps', type=int, default=24,
                         help='Maximum steps per episode')
@@ -119,7 +122,7 @@ def construct_save_model_path(args, prefix="DARC"):
         filename += args.env_name
     else:
         # Two-house (broken) experiments.
-        filename += f"broken{args.broken}_break_src{args.break_src}_{args.env_name}"
+        filename += f"broken{args.broken}_break_src{args.break_src}_{args.env-name}"
     return os.path.join(args.save_model, filename)
 
 def construct_log_dir(args, prefix="DARC"):
@@ -136,10 +139,10 @@ def construct_log_dir(args, prefix="DARC"):
             log_subfolder += f"cap_{args.capacity}_"
         elif args.variety_name == 'lp':
             log_subfolder += f"p_lim_{args.p_lim}_"
-        log_subfolder += f"{args.env_name}_{date_str}"
+        log_subfolder += f"{args.env-name}_{date_str}"
     else:
         log_subfolder = (f"{prefix}_broken_{args.broken}_break_src_{args.break_src}_"
-                         f"noise_{args.noise}_seed_{args.seed}_{args.env_name}_{date_str}")
+                         f"noise_{args.noise}_seed_{args.seed}_{args.env-name}_{date_str}")
     log_dir = os.path.join(base_log_dir, log_subfolder)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -162,27 +165,20 @@ def main():
             source_env = get_simple_linear_env(args.seed)
             if args.variety_name == 's':
                 target_env = get_new_soc_env(args.degree, args.seed)
-                target_env_mpc = get_new_soc_env(args.degree, args.seed, rl = False)
             elif args.variety_name == 'c':
                 target_env = get_new_charge_env(args.degree, args.seed)
-                target_env_mpc = get_new_charge_env(args.degree, args.seed, rl=False)
             elif args.variety_name == 'd':
                 target_env = get_new_discharge_env(args.degree, args.seed)
-                target_env_mpc = get_new_discharge_env(args.degree, args.seed, rl=False)
             elif args.variety_name.startswith('v'):
                 target_env = get_new_all_eff_env(args.degree, args.seed)
-                target_env_mpc = get_new_all_eff_env(args.degree, args.seed, rl=False)
             elif args.variety_name == 'lc':
                 target_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed)
-                target_env_mpc = get_new_limited_capacity_env(args.capacity, 1.5, args.seed, rl=False)
             elif args.variety_name == 'lp':
                 target_env = get_new_limited_plim_env(3, args.p_lim, args.seed)
-                target_env_mpc = get_new_limited_plim_env(3, args.p_lim, args.seed, rl=False)
             else:
                 raise ValueError("Unknown variety name: " + args.variety_name)
         else:
             target_env = get_simple_linear_env(args.seed)
-            target_env_mpc = get_simple_linear_env(args.seed, rl=False)
             if args.variety_name == 's':
                 source_env = get_new_soc_env(args.degree, args.seed)
             elif args.variety_name == 'c':
@@ -202,13 +198,18 @@ def main():
         if args.break_src == 1:
             source_env = get_twoHouses_env(damaged_battery=True, seed=args.seed)
             target_env = get_twoHouses_env(damaged_battery=False, seed=args.seed)
-            target_env_mpc = get_twoHouses_env(damaged_battery=False, seed=args.seed, rl=False)
         else:
             source_env = get_twoHouses_env(damaged_battery=False, seed=args.seed)
             target_env = get_twoHouses_env(damaged_battery=True, seed=args.seed)
-            target_env_mpc = get_twoHouses_env(damaged_battery=True, seed=args.seed, rl=False)
 
-    # Get dimensions from the source environment.
+    # --- Wrap the environments with DummyVecEnv and VecNormalize ---
+    source_env = DummyVecEnv([lambda: source_env])
+    source_env = VecNormalize(source_env, norm_obs=True, norm_reward=True, clip_obs=10.)
+    
+    target_env = DummyVecEnv([lambda: target_env])
+    target_env = VecNormalize(target_env, norm_obs=True, norm_reward=True, clip_obs=10.)
+
+    # Get dimensions from the (wrapped) source environment.
     state_dim = source_env.observation_space.shape[0]
     action_dim = source_env.action_space.shape[0]
     
@@ -311,10 +312,21 @@ def main():
     mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
 
     ############ TEST ####################
-
-    #mpc = MPC(target_env_mpc, save_dir=mpc_save_model_path,seed=args.seed)
+    #mpc = MPC(target_env, save_dir=mpc_save_model_path, seed=args.seed)
     #mpc.train()
-    #Save is automatic with run in mpc
+    # Save is automatic within MPC
+
+    # -------------------------------------------------------------------------
+    # Save VecNormalize scalers for later use.
+    # Both the source and target environment wrappers are saved.
+    # -------------------------------------------------------------------------
+    source_scaler_path = os.path.join(args.save_model, "source_vecnormalize.pkl")
+    target_scaler_path = os.path.join(args.save_model, "target_vecnormalize.pkl")
+    source_env.save(source_scaler_path)
+    target_env.save(target_scaler_path)
+    print("Saved VecNormalize scalers to:")
+    print(" Source scaler:", source_scaler_path)
+    print(" Target scaler:", target_scaler_path)
 
 if __name__ == '__main__':
     main()

@@ -129,7 +129,7 @@ class ContSAC:
             total_reward = 0
             n_steps = 0
             done = False
-            state = self.env.reset()
+            state = self.env.reset()[0]
             state = self.running_mean(state)
             while not done:
                 if self.total_train_steps <= self.warmup_games:
@@ -167,14 +167,14 @@ class ContSAC:
         self.policy.eval()
         self.twin_q.eval()
         for i in range(num_games):
-            state = self.env.reset()
+            state = self.env.reset()[0]
             state = self.running_mean(state)
             done = False
             total_reward = 0
             while not done:
                 action = self.get_action(state, deterministic=True)
                 next_state, reward, done, _ , _= self.env.step(action)
-                next_state = self.running_mean(next_state)
+                next_state = self.running_mean(next_state[0])
                 total_reward += reward
                 state = next_state
 
@@ -192,9 +192,10 @@ class ContSAC:
 
     # Load model parameters
     def load_model(self, folder_name, device):
-        path = 'saved_weights/' + folder_name
-        self.policy.load_state_dict(torch.load(path + '/policy', map_location=torch.device(device)))
-        self.twin_q.load_state_dict(torch.load(path + '/twin_q_net', map_location=torch.device(device)))
+        prepath = '/home/cubos98/Desktop/MA/DARAIL'
+        path = prepath + '/saved_weights/' + folder_name
+        self.policy.load_state_dict(torch.load(path + '/policy', map_location=torch.device(device), weights_only=True))
+        self.twin_q.load_state_dict(torch.load(path + '/twin_q_net', map_location=torch.device(device), weights_only=True))
 
         polyak_update(self.twin_q, self.target_twin_q, 1)
         polyak_update(self.twin_q, self.target_twin_q, 1)

@@ -3,14 +3,14 @@
 # This script runs the training script for multiple combinations of Smart Grid settings.
 
 # Common parameters
-TRAIN_STEPS=120   # For now !!!!!!!!!!!
+TRAIN_STEPS=120   # Number of GAMESS !!!
 LR=0.0008
 MAX_STEPS=24
 BS=12
 UPDATE=1
 DELTAR=1
 ENV_NAME="Smart_Grids"
-SAVE_MODEL="./saved_models/"
+SAVE_MODEL="./saved_models_experiments/"
 SAVE_FILE_NAME="test_run_"
 SEED=42  # Seed value included
 
@@ -22,7 +22,7 @@ echo "Starting experiments for Smart Grids..."
 
 # (i) Degree-based experiments: for varieties that use a degree (e.g., s, c, d, v)
 for lin_src in 0 1; do
-  for variety in s c d v lc lp; do
+  for variety in v; do
     for degree in 0.1 0.5 0.8; do
       for noise in 0 1; do
         echo "-----------------------------------------------------"
@@ -50,7 +50,7 @@ done
 
 # (ii) Capacity-based experiments: for variety "lc"
 for lin_src in 0 1; do
-  for capacity in 2 4; do
+  for capacity in 2 4 5; do
     for noise in 0 1; do
       echo "-----------------------------------------------------"
       echo "Running one-house (capacity): broken=0, lin_src=${lin_src}, variety=lc, capacity=${capacity}, noise=${noise}"
@@ -76,7 +76,7 @@ done
 
 # (iii) p_lim-based experiments: for variety "lp"
 for lin_src in 0 1; do
-  for p_lim in 1.0 2.0; do
+  for p_lim in 0.5 1.0 2.0; do
     for noise in 0 1; do
       echo "-----------------------------------------------------"
       echo "Running one-house (p_lim): broken=0, lin_src=${lin_src}, variety=lp, p_lim=${p_lim}, noise=${noise}"

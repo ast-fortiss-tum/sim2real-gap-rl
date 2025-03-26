@@ -1,13 +1,13 @@
 from datetime import timedelta
 from environments.smartgrid_env import SmartGrid_Linear, SmartGrid_Nonlinear, SmartGrid_TwoHouses
 
-def get_simple_linear_env(seed):
+def get_simple_linear_env(seed, rl = True):
     """
     Factory function to create a linear SmartGrid environment.
     Returns a gym.Env instance (ControlEnv) configured via SmartGrid_Linear.
     """
     env_instance = SmartGrid_Linear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -19,11 +19,11 @@ def get_simple_linear_env(seed):
     )
     # Set maximum episode steps.
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_new_soc_env(degree,seed):
+def get_new_soc_env(degree,seed, rl = True):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -32,7 +32,7 @@ def get_new_soc_env(degree,seed):
         "etas": degree  # modified self-discharge efficiency
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -43,12 +43,12 @@ def get_new_soc_env(degree,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     print(env_instance.env)
     return env_instance.env
 
-def get_new_charge_env(degree,seed):
+def get_new_charge_env(degree,seed, rl = True):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -57,7 +57,7 @@ def get_new_charge_env(degree,seed):
         "etas": 1.0     
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -68,11 +68,11 @@ def get_new_charge_env(degree,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_new_discharge_env(degree,seed):
+def get_new_discharge_env(degree,seed, rl = True):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -81,7 +81,7 @@ def get_new_discharge_env(degree,seed):
         "etas": 1.0 
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -92,11 +92,11 @@ def get_new_discharge_env(degree,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_new_all_eff_env(degree,seed):
+def get_new_all_eff_env(degree,seed, rl = True):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -105,7 +105,7 @@ def get_new_all_eff_env(degree,seed):
         "etas": degree
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -116,11 +116,11 @@ def get_new_all_eff_env(degree,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed):
+def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     """
     Creates an environment with a reduced capacity.
     The capacity is set to 10% of nominal_capacity while p_lim remains nominal.
@@ -133,7 +133,7 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed):
         "etas": 1.0
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -144,11 +144,11 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed):
+def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     """
     Creates an environment with a reduced power limit.
     The p_lim is set to 10% of nominal_p_lim while capacity remains nominal.
@@ -162,7 +162,7 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed):
         "etas": 1.0
     }
     env_instance = SmartGrid_Nonlinear(
-        rl=True,
+        rl=rl,
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
@@ -173,18 +173,18 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed):
         params_battery=params_battery
     )
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     return env_instance.env
 
-def get_twoHouses_env(damaged_battery,seed):
+def get_twoHouses_env(damaged_battery,seed, rl = True):
     # Define battery parameters.
     params_battery = {
-        "rho": 0.01,    # wear cost per kWh
-        "p_lim": 1.5,     # power limit
-        "etac": 0.9,   # charging efficiency
-        "etad": 0.8,   # discharging efficiency
-        "etas": 0.7    # self-discharge rate
+        "rho": 0.1,    # wear cost per kWh
+        "p_lim": 1,     # power limit
+        "etac": 1.0,   # charging efficiency
+        "etad": 1.0,   # discharging efficiency
+        "etas": 1.0    # self-discharge rate
     }
     
     # Create the SmartGrid_TwoHouses instance.
@@ -193,14 +193,14 @@ def get_twoHouses_env(damaged_battery,seed):
         fixed_start="27.11.2016",
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        capacity=3,
+        capacity=1,
         seed=seed,
         battery2_damaged=damaged_battery  # Set True to simulate a damaged battery for household 2.
     )
     
     # Explicitly set up the system and runner/trainer.
     env_instance.setup_system()
-    env_instance.setup_runner_trainer(rl=True)
+    env_instance.setup_runner_trainer(rl=rl)
     env_instance.env._max_episode_steps = 24
     
     print("SmartGrid_TwoHouses grid has been set up successfully.")

@@ -13,7 +13,7 @@ class DARC(ContSAC):
     def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, savefolder, running_mean,
                  log_dir="latest_runs", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
-                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=False, print_on=False,
+                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=True, print_on=False,
                  seed=42):
         # Set the seed for reproducibility if provided
         if seed is not None:
@@ -156,7 +156,6 @@ class DARC(ContSAC):
         if env_name == "source":
             env = self.source_env
             memory = self.source_memory
-            print(env)
         elif env_name == "target":
             env = self.target_env
             memory = self.target_memory
@@ -204,15 +203,14 @@ class DARC(ContSAC):
             ver_actions_values = [value for arr in ver_actions_values for value in arr]
             ver_penalties_values = [value for dv in ver_penalties_values for value in list(dv)]
 
-            print("+++++++++++++++++++++++++++++++++")
-            print("VERIFIED ACTIONS VALUES: ", ver_actions_values)
-            print("VERIFIED PENALTIES VALUES: ", ver_penalties_values)
-            print("SOC: ", state[100])
-            print("next_SOC: ", next_state[100])
-            print("UNVERIFIED ACTION: ", action)
-            print("+++++++++++++++++++++++++++++++++")
+            #print("+++++++++++++++++++++++++++++++++")
+            #print("VERIFIED ACTIONS VALUES: ", ver_actions_values)
+            #print("VERIFIED PENALTIES VALUES: ", ver_penalties_values)
+            #print("SOC: ", state[100])
+            #print("next_SOC: ", next_state[100])
+            #print("UNVERIFIED ACTION: ", action)
+            #print("+++++++++++++++++++++++++++++++++")
 
-            time.sleep(3)
             memory.add(state, ver_actions_values, reward, next_state, done_mask)
             if env_name == "source":
                 self.source_step += 1
@@ -324,9 +322,9 @@ class DARC(ContSAC):
 
     def load_model(self, folder_name, device):
         super(DARC, self).load_model(folder_name, device)
-        path = 'saved_weights/' + folder_name
-        self.sa_classifier.load_state_dict(torch.load(path + '/sa_classifier', map_location=torch.device(device)))
-        self.sas_adv_classifier.load_state_dict(torch.load(path + '/sas_adv_classifier', map_location=torch.device(device)))
+        path = './saved_weights/' + folder_name
+        self.sa_classifier.load_state_dict(torch.load(path + '/sa_classifier', map_location=torch.device(device), weights_only=True))
+        self.sas_adv_classifier.load_state_dict(torch.load(path + '/sas_adv_classifier', map_location=torch.device(device), weights_only=True))
         self.running_mean = pickle.load(open(path + '/running_mean', "rb"))
 
 
@@ -334,10 +332,15 @@ class DARC_two(ContSAC):
     def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, savefolder, running_mean,
                  log_dir="latest_runs", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
-                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=False, print_on=False):
+                 target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=False, print_on=False, seed=42):
         super(DARC_two, self).__init__(policy_config, value_config, source_env, device, log_dir, None,
                                        memory_size, None, batch_size, lr, gamma, tau,
-                                       alpha, ent_adj, target_update_interval, None, n_updates_per_train)
+                                       alpha, ent_adj, target_update_interval, None, n_updates_per_train,seed=seed)
+        
+        # Set the seed for reproducibility if provided
+        if seed is not None:
+            set_global_seed(seed)
+
         self.delta_r_scale = delta_r_scale
         self.s_t_ratio = s_t_ratio
         self.noise_scale = noise_scale
@@ -396,13 +399,14 @@ class DARC_two(ContSAC):
             # Build inputs using both state indices (100 and 226)
             sa_inputs = torch.cat([
                 torch.cat([s_states[:, 100].unsqueeze(1), s_states[:, 226].unsqueeze(1)], dim=1),
-                s_actions[:, 0].unsqueeze(1)
+                s_actions
             ], dim=1)
             sas_inputs = torch.cat([
                 torch.cat([s_states[:, 100].unsqueeze(1), s_states[:, 226].unsqueeze(1)], dim=1),
-                s_actions[:, 0].unsqueeze(1),
+                s_actions,
                 torch.cat([s_next_states[:, 100].unsqueeze(1), s_next_states[:, 226].unsqueeze(1)], dim=1)
             ], dim=1)
+
             sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
             sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
@@ -416,20 +420,20 @@ class DARC_two(ContSAC):
         # Classifier inputs using both state indices.
         s_sa_inputs = torch.cat([
             torch.cat([s_states[:, 100].unsqueeze(1), s_states[:, 226].unsqueeze(1)], dim=1),
-            s_actions[:, 0].unsqueeze(1)
+            s_actions
         ], dim=1)
         s_sas_inputs = torch.cat([
             torch.cat([s_states[:, 100].unsqueeze(1), s_states[:, 226].unsqueeze(1)], dim=1),
-            s_actions[:, 0].unsqueeze(1),
+            s_actions,
             torch.cat([s_next_states[:, 100].unsqueeze(1), s_next_states[:, 226].unsqueeze(1)], dim=1)
         ], dim=1)
         t_sa_inputs = torch.cat([
             torch.cat([t_states[:, 100].unsqueeze(1), t_states[:, 226].unsqueeze(1)], dim=1),
-            t_actions[:, 0].unsqueeze(1)
+            t_actions
         ], dim=1)
         t_sas_inputs = torch.cat([
             torch.cat([t_states[:, 100].unsqueeze(1), t_states[:, 226].unsqueeze(1)], dim=1),
-            t_actions[:, 0].unsqueeze(1),
+            t_actions,
             torch.cat([t_next_states[:, 100].unsqueeze(1), t_next_states[:, 226].unsqueeze(1)], dim=1)
         ], dim=1)
         
@@ -469,7 +473,6 @@ class DARC_two(ContSAC):
         if env_name == "source":
             env = self.source_env
             memory = self.source_memory
-            print(env)
         elif env_name == "target":
             env = self.target_env
             memory = self.target_memory
@@ -513,15 +516,15 @@ class DARC_two(ContSAC):
             ver_actions_values = [value for arr in ver_actions_values for value in arr]
             ver_penalties_values = [value for dv in ver_penalties_values for value in list(dv)]
 
-            print("+++++++++++++++++++++++++++++++++")
-            print("VERIFIED ACTIONS VALUES: ", ver_actions_values)
-            print("VERIFIED PENALTIES VALUES: ", ver_penalties_values)
-            print("SOC: ", state[100], "next_SOC: ", next_state[100])
-            print("UNVERIFIED ACTION: ", action)
-            print("+++++++++++++++++++++++++++++++++")
+            #print("+++++++++++++++++++++++++++++++++")
+            #print("VERIFIED ACTIONS VALUES: ", ver_actions_values)
+            #print("VERIFIED PENALTIES VALUES: ", ver_penalties_values)
+            #print("SOC: ", state[100], "next_SOC: ", next_state[100])
+            #print("UNVERIFIED ACTION: ", action)
+            #print("+++++++++++++++++++++++++++++++++")
 
             memory.add(state, ver_actions_values, reward, next_state, 
-                       done_mask=1.0 if n_steps == env._max_episode_steps - 1 else 0.0)
+                       done=1.0 if n_steps == env._max_episode_steps - 1 else 0.0)
             if env_name == "source":
                 self.source_step += 1
             elif env_name == "target":
