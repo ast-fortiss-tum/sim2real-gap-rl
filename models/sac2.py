@@ -14,10 +14,10 @@ from replay_buffer import ReplayBuffer
 from tensor_writer import TensorWriter
 
 class ContSAC:
-    def __init__(self, policy_config, value_config, env, device, log_dir="", running_mean=None,
-                 noise_scale=0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, 
-                 tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, n_games_til_train=1, 
-                 n_updates_per_train=1, max_steps=200, seed=None):
+    def __init__(self, policy_config, value_config, env, device, log_dir="latest_runs", running_mean=None,
+                 memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, tau=0.003, alpha=0.2,
+                 ent_adj=False, target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, max_steps=200,
+                 seed=None):
         # Set the global seed if provided for reproducibility
         if seed is not None:
             set_global_seed(seed)
@@ -25,7 +25,6 @@ class ContSAC:
         self.device = device
         self.gamma = gamma
         self.batch_size = batch_size
-        self.noise_scale = noise_scale  # New parameter for observational noise
 
         path = 'runs/' + log_dir
         if not os.path.exists(path):
@@ -63,17 +62,14 @@ class ContSAC:
 
         self.total_train_steps = 0
 
-    def add_obs_noise(self, obs):
-        """Adds Gaussian noise to the observation."""
-        return obs + np.random.normal(0, self.noise_scale, size=obs.shape)
-
-    def get_action(self, state, deterministic=False, transform=False):
+    def get_action(self, state, deterministic=False,transform = False):
         with torch.no_grad():
             state = torch.as_tensor(state[np.newaxis, :].copy(), dtype=torch.float32).to(self.device)
             if deterministic:
-                _, _, action = self.policy.sample(state, transform)
+                _, _, action = self.policy.sample(state,transform)
             else:
-                action, _, _ = self.policy.sample(state, transform)
+                # print(policy)
+                action, _, _ = self.policy.sample(state,transform)
             return action.detach().cpu().numpy()[0]
 
     def train_step(self, states, actions, rewards, next_states, done_masks):
@@ -88,6 +84,7 @@ class ContSAC:
             next_action, next_log_prob, _ = self.policy.sample(next_states)
             next_q = self.target_twin_q(next_states, next_action)[0]
             v = next_q - self.alpha * next_log_prob
+ 
             expected_q = rewards + done_masks * self.gamma * v
 
         # Q backprop
@@ -134,26 +131,23 @@ class ContSAC:
             done = False
             state = self.env.reset()[0]
             state = self.running_mean(state)
-            if self.noise_scale > 0:
-                state = self.add_obs_noise(state)  # Apply noise to the initial observation
-            
             while not done:
                 if self.total_train_steps <= self.warmup_games:
                     action = self.env.action_space.sample()
                 else:
                     action = self.get_action(state, deterministic)
-                next_state, reward, done, _ , _ = self.env.step(action)
-                next_state = self.running_mean(next_state)
-                if self.noise_scale > 0:
-                    next_state = self.add_obs_noise(next_state)  # Apply noise to the next observation
 
+                next_state, reward, done, _ , _= self.env.step(action)
+                next_state = self.running_mean(next_state)
                 done_mask = 1.0 if n_steps == self.env._max_episode_steps - 1 else float(not done)
+
                 self.memory.add(state, action, reward, next_state, done_mask)
 
                 n_steps += 1
+                
                 total_reward += reward
                 state = next_state
-                if n_steps > self.max_steps:
+                if n_steps>self.max_steps:
                     break
 
             if i >= self.warmup_games:
@@ -172,32 +166,19 @@ class ContSAC:
     def eval(self, num_games, render=True):
         self.policy.eval()
         self.twin_q.eval()
-        reward_all = 0
         for i in range(num_games):
             state = self.env.reset()[0]
             state = self.running_mean(state)
-            if self.noise_scale > 0:
-                state = self.add_obs_noise(state)  # Apply noise to the initial observation in eval
             done = False
             total_reward = 0
             while not done:
                 action = self.get_action(state, deterministic=True)
-                next_state, reward, done, _ , _ = self.env.step(action)
+                next_state, reward, done, _ , _= self.env.step(action)
                 next_state = self.running_mean(next_state[0])
-                if self.noise_scale > 0:
-                    next_state = self.add_obs_noise(next_state)  # Apply noise to the next observation
                 total_reward += reward
                 state = next_state
 
-            # Log each episode's reward.
-            self.writer.add_scalar('Eval/Reward', total_reward, i)
-            reward_all += total_reward
-
-        avg_reward = reward_all / num_games
-        # Log the average evaluation reward.
-        self.writer.add_scalar('Eval/Avg Reward', avg_reward, num_games)
-        print("Average Eval Reward:", avg_reward)
-        return avg_reward
+            print(i, total_reward)
 
     def save_model(self, folder_name):
         path = 'saved_weights/' + folder_name
@@ -206,7 +187,8 @@ class ContSAC:
 
         torch.save(self.policy.state_dict(), path + '/policy')
         torch.save(self.twin_q.state_dict(), path + '/twin_q_net')
-        pickle.dump(self.running_mean, open(path + '/running_mean', 'wb'))
+        pickle.dump(self.running_mean,
+            open(path + '/running_mean', 'wb'))
 
     # Load model parameters
     def load_model(self, folder_name, device):
@@ -225,5 +207,6 @@ def set_global_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    # For additional determinism in CUDA (may slow down training)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False

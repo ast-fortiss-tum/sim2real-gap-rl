@@ -10,8 +10,8 @@ from models.sac import ContSAC, set_global_seed
 import pickle
 
 class DARC(ContSAC):
-    def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, savefolder, running_mean,
-                 log_dir="latest_runs", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
+    def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, running_mean,
+                 log_dir="", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
                  target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=True, print_on=False,
                  seed=42):
@@ -21,7 +21,7 @@ class DARC(ContSAC):
         
         # Note: The call to super() must match the ContSAC signature.
         # Adjust arguments as needed – here we pass source_env as the environment.
-        super(DARC, self).__init__(policy_config, value_config, source_env, device, log_dir, running_mean,
+        super(DARC, self).__init__(policy_config, value_config, source_env, device, log_dir, running_mean, noise_scale,
                                      memory_size, warmup_games, batch_size, lr, gamma, tau,
                                      alpha, ent_adj, target_update_interval, n_games_til_train, n_updates_per_train, max_steps)
         
@@ -41,7 +41,6 @@ class DARC(ContSAC):
         self.sas_adv_classifier_opt = Adam(self.sas_adv_classifier.parameters(), lr=lr)
         self.running_mean = running_mean
         self.max_steps = max_steps
-        self.savefolder = savefolder
 
         self.if_normalize = if_normalize    
 
@@ -249,7 +248,7 @@ class DARC(ContSAC):
                 if i % 100 == 0:
                     print('src', self.eval_src(10))
                     print('tgt', self.eval_tgt(10))
-                    self.save_model(str(i))
+                    #self.save_model(str(i))
 
             print("SOURCE: index: {}, steps: {}, total_rewards: {}".format(i, source_step, source_reward))
 
@@ -278,8 +277,13 @@ class DARC(ContSAC):
                 if step == self.max_steps:
                     done = True
                 step += 1
+            # Log the reward for each individual evaluation game.
+            self.writer.add_scalar('Eval/Source Reward', total_reward, i)
             reward_all += total_reward
-        return reward_all / num_games
+        avg_reward = reward_all / num_games
+        # Log the average reward after evaluation.
+        self.writer.add_scalar('Eval/Source Avg Reward', avg_reward, num_games)
+        return avg_reward
 
     def eval_tgt(self, num_games, render=False):
         self.policy.eval()
@@ -306,12 +310,17 @@ class DARC(ContSAC):
                 if step == self.max_steps:
                     done = True
                 step += 1
+            # Log the reward for each evaluation game.
+            self.writer.add_scalar('Eval/Target Reward', total_reward, i)
             reward_all += total_reward
-        return reward_all / num_games
+        avg_reward = reward_all / num_games
+        # Log the average target reward after evaluation.
+        self.writer.add_scalar('Eval/Target Avg Reward', avg_reward, num_games)
+        return avg_reward
 
     def save_model(self, folder_name):
         import os
-        path = os.path.join('saved_weights/' + self.savefolder, folder_name)
+        path = os.path.join('saved_weights/', folder_name)
         if not os.path.exists(path):
             os.makedirs(path)
         torch.save(self.policy.state_dict(), path + '/policy')
@@ -329,8 +338,8 @@ class DARC(ContSAC):
 
 
 class DARC_two(ContSAC):
-    def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, savefolder, running_mean,
-                 log_dir="latest_runs", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
+    def __init__(self, policy_config, value_config, sa_config, sas_config, source_env, target_env, device, running_mean,
+                 log_dir="", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
                  target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=False, print_on=False, seed=42):
         super(DARC_two, self).__init__(policy_config, value_config, source_env, device, log_dir, None,
@@ -357,7 +366,6 @@ class DARC_two(ContSAC):
         self.sas_adv_classifier_opt = Adam(self.sas_adv_classifier.parameters(), lr=lr)
         self.running_mean = running_mean
         self.max_steps = max_steps
-        self.savefolder = savefolder
 
         self.if_normalize = if_normalize    
 
@@ -562,7 +570,7 @@ class DARC_two(ContSAC):
                 if i % 100 == 0:
                     print('src', self.eval_src(10))
                     print('tgt', self.eval_tgt(10))
-                    self.save_model(str(i))
+                    #self.save_model(str(i))
 
             print("SOURCE: index: {}, steps: {}, total_rewards: {}".format(i, source_step, source_reward))
 
@@ -624,7 +632,7 @@ class DARC_two(ContSAC):
 
     def save_model(self, folder_name):
         import os
-        path = os.path.join('saved_weights/' + self.savefolder, folder_name)
+        path = os.path.join('saved_weights/', folder_name)
         if not os.path.exists(path):
             os.makedirs(path)
         torch.save(self.policy.state_dict(), path + '/policy')

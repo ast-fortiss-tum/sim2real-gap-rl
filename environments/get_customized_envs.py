@@ -1,7 +1,7 @@
 from datetime import timedelta
 from environments.smartgrid_env import SmartGrid_Linear, SmartGrid_Nonlinear, SmartGrid_TwoHouses
 
-def get_simple_linear_env(seed, rl = True):
+def get_simple_linear_env(seed, rl=True, fixed_start="27.11.2016"):
     """
     Factory function to create a linear SmartGrid environment.
     Returns a gym.Env instance (ControlEnv) configured via SmartGrid_Linear.
@@ -11,7 +11,7 @@ def get_simple_linear_env(seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -23,7 +23,7 @@ def get_simple_linear_env(seed, rl = True):
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_new_soc_env(degree,seed, rl = True):
+def get_new_soc_env(degree, seed, rl=True, fixed_start="27.11.2016"):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -36,7 +36,7 @@ def get_new_soc_env(degree,seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=1,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -48,7 +48,7 @@ def get_new_soc_env(degree,seed, rl = True):
     print(env_instance.env)
     return env_instance
 
-def get_new_charge_env(degree,seed, rl = True):
+def get_new_charge_env(degree, seed, rl=True, fixed_start="27.11.2016"):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -61,7 +61,7 @@ def get_new_charge_env(degree,seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -72,7 +72,7 @@ def get_new_charge_env(degree,seed, rl = True):
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_new_discharge_env(degree,seed, rl = True):
+def get_new_discharge_env(degree, seed, rl=True, fixed_start="27.11.2016"):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -85,7 +85,7 @@ def get_new_discharge_env(degree,seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -96,7 +96,7 @@ def get_new_discharge_env(degree,seed, rl = True):
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_new_all_eff_env(degree,seed, rl = True):
+def get_new_all_eff_env(degree, seed, rl=True, fixed_start="27.11.2016"):
     params_battery = {
         "rho": 0.1,
         "p_lim": 1.5,
@@ -109,7 +109,7 @@ def get_new_all_eff_env(degree,seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=3,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -120,7 +120,7 @@ def get_new_all_eff_env(degree,seed, rl = True):
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True):
+def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim, seed, rl=True, fixed_start="27.11.2016"):
     """
     Creates an environment with a reduced capacity.
     The capacity is set to 10% of nominal_capacity while p_lim remains nominal.
@@ -137,7 +137,7 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=nominal_capacity,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -148,12 +148,11 @@ def get_new_limited_capacity_env(nominal_capacity, nominal_p_lim,seed, rl = True
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
+def get_new_limited_plim_env(nominal_capacity, nominal_p_lim, seed, rl=True, fixed_start="27.11.2016"):
     """
     Creates an environment with a reduced power limit.
     The p_lim is set to 10% of nominal_p_lim while capacity remains nominal.
     """
-
     params_battery = {
         "rho": 0.1,
         "p_lim": nominal_p_lim,
@@ -166,7 +165,7 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
         policy_path=None,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         capacity=nominal_capacity,
         data_path="./data/1-LV-rural2--1-sw",
         seed=seed,
@@ -177,7 +176,7 @@ def get_new_limited_plim_env(nominal_capacity, nominal_p_lim,seed, rl = True):
     env_instance.env._max_episode_steps = 24
     return env_instance
 
-def get_twoHouses_env(damaged_battery,seed, rl = True):
+def get_twoHouses_env(damaged_battery, seed, rl=True, fixed_start="27.11.2016"):
     # Define battery parameters.
     params_battery = {
         "rho": 0.1,    # wear cost per kWh
@@ -190,7 +189,7 @@ def get_twoHouses_env(damaged_battery,seed, rl = True):
     # Create the SmartGrid_TwoHouses instance.
     env_instance = SmartGrid_TwoHouses(
         params_battery=params_battery,
-        fixed_start="27.11.2016",
+        fixed_start=fixed_start,
         horizon=timedelta(hours=24),
         frequency=timedelta(minutes=60),
         capacity=1,

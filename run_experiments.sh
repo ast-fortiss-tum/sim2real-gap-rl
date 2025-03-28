@@ -3,16 +3,17 @@
 # This script runs the training script for multiple combinations of Smart Grid settings.
 
 # Common parameters
-TRAIN_STEPS=200   # Number of GAMESS !!!
+TRAIN_STEPS=200   # Number of training steps
 LR=0.0008
 MAX_STEPS=24
 BS=12
 UPDATE=1
 DELTAR=1
 ENV_NAME="Smart_Grids"
-SAVE_MODEL="./saved_models_experiments/"
+SAVE_MODEL="./saved_models_experiments_2/"
 SAVE_FILE_NAME="test_run_"
 SEED=42  # Seed value included
+FIXED_START="27.11.2016"   # Fixed start date
 
 echo "Starting experiments for Smart Grids..."
 
@@ -24,11 +25,12 @@ echo "Starting experiments for Smart Grids..."
 for lin_src in 0 1; do
   for variety in v; do
     for degree in 0.2 0.5 0.8; do
-      for noise in 0 1; do
+      for noise in 0.0 1.0; do
         echo "-----------------------------------------------------"
         echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"
         python3 train_darc_SmartGrids.py \
           --env-name ${ENV_NAME} \
+          --fixed-start ${FIXED_START} \
           --broken 0 \
           --lin_src ${lin_src} \
           --variety-name ${variety} \
@@ -50,12 +52,13 @@ done
 
 # (ii) Capacity-based experiments: for variety "lc"
 for lin_src in 0 1; do
-  for capacity in 2 4 5; do
-    for noise in 0 1; do
+  for capacity in 2.0 4.0 5.0; do
+    for noise in 0.0 1.0; do
       echo "-----------------------------------------------------"
       echo "Running one-house (capacity): broken=0, lin_src=${lin_src}, variety=lc, capacity=${capacity}, noise=${noise}"
       python3 train_darc_SmartGrids.py \
         --env-name ${ENV_NAME} \
+        --fixed-start ${FIXED_START} \
         --broken 0 \
         --lin_src ${lin_src} \
         --variety-name lc \
@@ -77,11 +80,12 @@ done
 # (iii) p_lim-based experiments: for variety "lp"
 for lin_src in 0 1; do
   for p_lim in 0.5 1.0 2.0; do
-    for noise in 0 1; do
+    for noise in 0.0 1.0; do
       echo "-----------------------------------------------------"
       echo "Running one-house (p_lim): broken=0, lin_src=${lin_src}, variety=lp, p_lim=${p_lim}, noise=${noise}"
       python3 train_darc_SmartGrids.py \
         --env-name ${ENV_NAME} \
+        --fixed-start ${FIXED_START} \
         --broken 0 \
         --lin_src ${lin_src} \
         --variety-name lp \
@@ -104,11 +108,12 @@ done
 # Two-house experiments (broken == 1)
 #########################################
 for break_src in 0 1; do
-  for noise in 0 1; do
+  for noise in 0.0 1.0; do
     echo "-----------------------------------------------------"
     echo "Running two-house: broken=1, break_src=${break_src}, noise=${noise}"
     python3 train_darc_SmartGrids.py \
       --env-name ${ENV_NAME} \
+      --fixed-start ${FIXED_START} \
       --broken 1 \
       --break_src ${break_src} \
       --noise ${noise} \
@@ -126,4 +131,3 @@ done
 
 echo "All experiments finished :)"
 echo "---------------------------------------"
-

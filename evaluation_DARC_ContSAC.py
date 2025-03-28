@@ -56,13 +56,13 @@ def evaluate_model(model, env, num_games=10, base_seed=42):
 
 def main():
     parser = argparse.ArgumentParser(description="Compare ContSAC vs DARC Models")
-    parser.add_argument('--contsac-model-folder', type=str, default="ContSAC__20250325_042457_lr0.0008_noise0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids",
+    parser.add_argument('--contsac-model-folder', type=str, default="/saved_models_experiments/ContSAC_test_run__20250327_045047_lr0.0008_noise0.0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids",
                         help='Folder name under saved_weights for the saved ContSAC model')
-    parser.add_argument('--darc-model-folder', type=str, default="DARC__20250325_041917_lr0.0008_noise0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids/DARC__20250325_041917_lr0.0008_noise0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids",
+    parser.add_argument('--darc-model-folder', type=str, default="/saved_models_experiments/DARC_test_run__20250327_044227_lr0.0008_noise0.0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids/saved_models_experiments/DARC_test_run__20250327_044227_lr0.0008_noise0.0_seed42_lin_src1_varietyv_degree0.5_Smart_Grids",
                         help='Folder name under saved_weights for the saved DARC model')
     parser.add_argument('--num-games', type=int, default=10,
                         help='Number of evaluation episodes per model')
-    parser.add_argument('--seed', type=int, default=49,
+    parser.add_argument('--seed', type=int, default=126,
                         help='Base seed for evaluation (will be incremented for each episode)')
     args = parser.parse_args()
 
@@ -72,7 +72,8 @@ def main():
     torch.manual_seed(args.seed)
 
     # Create the evaluation environment.
-    env = get_new_all_eff_env(0.5, args.seed, rl=True)
+    #env = get_new_all_eff_env(0.2, args.seed, rl=True).env
+    env = get_new_all_eff_env(0.5, args.seed, rl = True).env
     
     # Get dimensions from the environment.
     state_dim = env.observation_space.shape[0]

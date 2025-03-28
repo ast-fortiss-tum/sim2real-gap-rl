@@ -30,7 +30,7 @@ def parse_args():
     # Saving and training hyperparameters
     parser.add_argument('--save-model', type=str, default="",
                         help='Base path for saving the model')
-    parser.add_argument('--train-steps', type=int, default=24*5,
+    parser.add_argument('--train-steps', type=int, default=201,
                         help='Number of training steps')
     parser.add_argument('--max-steps', type=int, default=24,
                         help='Maximum steps per episode')
@@ -52,6 +52,11 @@ def parse_args():
                         help='Name of environment to use (only Smart_Grids supported)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for environment')
+    #parser.add_argument('--fixed-start', type=str, default="27.11.2016",
+    #                    help='Fixed start date for the environment (format DD.MM.YYYY)')
+
+    parser.add_argument('--fixed-start', type=str, default=None,
+                        help='Fixed start date for the environment (format DD.MM.YYYY)')
 
     # Mandatory: Broken flag (0: one-house, 1: two-house)
     parser.add_argument('--broken', type=int, choices=[0,1], required=True,
@@ -65,9 +70,9 @@ def parse_args():
                         help="Name of variety ('s', 'c', 'd', 'v...', 'lc', 'lp') (mandatory when broken==0)")
     parser.add_argument('--degree', type=float, default=None,
                         help='Degree parameter for variety (in (0,1]) (mandatory when broken==0)')
-    parser.add_argument('--noise', type=float, default=0,
+    parser.add_argument('--noise', type=float, default=0.0,
                         help='Noise scale (mandatory when broken==0)')
-    parser.add_argument('--capacity', type=int, default=3,
+    parser.add_argument('--capacity', type=float, default=3.0,
                         help='Capacity of the battery in Wh (mandatory when broken==0)')
     parser.add_argument('--p_lim', type=float, default=1.5,
                         help='Power limit of the battery in W (mandatory when broken==0)')
@@ -92,8 +97,8 @@ def parse_args():
             missing.append("--lin_src")
         if args.variety_name is None:
             missing.append("--variety-name")
-        if args.degree and args.capacity and args.p_lim is None:
-            missing.append("--degree or --capacity or --p_lim")
+        if args.degree is None and args.capacity is None and args.p_lim is None:
+            missing.append("--degree, --capacity, or --p_lim")
         if missing:
             parser.error("When broken == 0, the following arguments are required: " + ", ".join(missing))
     else:  # args.broken == 1
@@ -102,14 +107,15 @@ def parse_args():
     return args
 
 def construct_save_model_path(args, prefix="DARC"):
-    currentDateAndTime = datetime.now()
-    date_str = currentDateAndTime.strftime("%Y%m%d_%H%M%S")
-    # Build a base filename with common parameters, model prefix, and seed value.
-    filename = f"{prefix}_{args.save_file_name}_{date_str}_lr{args.lr}_noise{args.noise}_seed{args.seed}_"
+    # Replace dots in fixed_start for a cleaner filename.
+    fs = args.fixed_start
+    if args.fixed_start is not None:
+        fs = args.fixed_start.replace('.', '-')
+    # Build a filename solely from the hyperparameters.
+    filename = f"{prefix}_{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_seed{args.seed}_"
     if args.broken == 0:
         # One-house experiments: include linear source flag and variety.
         filename += f"lin_src{args.lin_src}_variety{args.variety_name}_"
-        # Depending on the variety, add the relevant parameter.
         if args.variety_name in ['s', 'c', 'd'] or args.variety_name.startswith('v'):
             filename += f"degree{args.degree}_"
         elif args.variety_name == 'lc':
@@ -118,17 +124,17 @@ def construct_save_model_path(args, prefix="DARC"):
             filename += f"p_lim{args.p_lim}_"
         filename += args.env_name
     else:
-        # Two-house (broken) experiments.
         filename += f"broken{args.broken}_break_src{args.break_src}_{args.env_name}"
     return os.path.join(args.save_model, filename)
 
 def construct_log_dir(args, prefix="DARC"):
-    base_log_dir = "runs"
-    os.makedirs(base_log_dir, exist_ok=True)
-    currentDateAndTime = datetime.now()
-    date_str = currentDateAndTime.strftime("%Y%m%d_%H%M%S")
+    base_log_dir = "runs2"  # Change if needed !!
+    #os.makedirs(base_log_dir, exist_ok=True)
+    fs = args.fixed_start
+    if args.fixed_start is not None:
+        fs = args.fixed_start.replace('.', '-')
     if args.broken == 0:
-        log_subfolder = (f"{prefix}_lin_src_{args.lin_src}_variety_{args.variety_name}_"
+        log_subfolder = (f"{prefix}_fs_{fs}_lin_src_{args.lin_src}_variety_{args.variety_name}_"
                          f"noise_{args.noise}_seed_{args.seed}_")
         if args.variety_name in ['s', 'c', 'd'] or args.variety_name.startswith('v'):
             log_subfolder += f"degree_{args.degree}_"
@@ -136,10 +142,10 @@ def construct_log_dir(args, prefix="DARC"):
             log_subfolder += f"cap_{args.capacity}_"
         elif args.variety_name == 'lp':
             log_subfolder += f"p_lim_{args.p_lim}_"
-        log_subfolder += f"{args.env_name}_{date_str}"
+        log_subfolder += f"{args.env_name}"
     else:
-        log_subfolder = (f"{prefix}_broken_{args.broken}_break_src_{args.break_src}_"
-                         f"noise_{args.noise}_seed_{args.seed}_{args.env_name}_{date_str}")
+        log_subfolder = (f"{prefix}_fs_{fs}_broken_{args.broken}_break_src_{args.break_src}_"
+                         f"noise_{args.noise}_seed_{args.seed}_{args.env_name}")
     log_dir = os.path.join(base_log_dir, log_subfolder)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -159,46 +165,45 @@ def main():
     if args.broken == 0:
         # One-house setting with variety modifications.
         if args.lin_src == 1:
-            source_env = get_simple_linear_env(args.seed).env
+            source_env = get_simple_linear_env(args.seed, fixed_start=args.fixed_start).env
             if args.variety_name == 's':
-                target_env = get_new_soc_env(args.degree, args.seed).env
+                target_env = get_new_soc_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'c':
-                target_env = get_new_charge_env(args.degree, args.seed).env
+                target_env = get_new_charge_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'd':
-                target_env = get_new_discharge_env(args.degree, args.seed).env
+                target_env = get_new_discharge_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name.startswith('v'):
-                target_env = get_new_all_eff_env(args.degree, args.seed).env
+                target_env = get_new_all_eff_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'lc':
-                target_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed).env
+                target_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'lp':
-                target_env = get_new_limited_plim_env(3, args.p_lim, args.seed).env
+                target_env = get_new_limited_plim_env(3, args.p_lim, args.seed, fixed_start=args.fixed_start).env
             else:
                 raise ValueError("Unknown variety name: " + args.variety_name)
         else:
-            target_env = get_simple_linear_env(args.seed).env
+            target_env = get_simple_linear_env(args.seed, fixed_start=args.fixed_start).env
             if args.variety_name == 's':
-                source_env = get_new_soc_env(args.degree, args.seed).env
+                source_env = get_new_soc_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'c':
-                source_env = get_new_charge_env(args.degree, args.seed).env
+                source_env = get_new_charge_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'd':
-                source_env = get_new_discharge_env(args.degree, args.seed).env
+                source_env = get_new_discharge_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name.startswith('v'):
-                source_env = get_new_all_eff_env(args.degree, args.seed).env
+                source_env = get_new_all_eff_env(args.degree, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'lc':
-                source_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed).env
+                source_env = get_new_limited_capacity_env(args.capacity, 1.5, args.seed, fixed_start=args.fixed_start).env
             elif args.variety_name == 'lp':
-                source_env = get_new_limited_plim_env(3, args.p_lim, args.seed).env
+                source_env = get_new_limited_plim_env(3, args.p_lim, args.seed, fixed_start=args.fixed_start).env
             else:
                 raise ValueError("Unknown variety name: " + args.variety_name)
     else:
         # Two-house setting (broken environment).
         if args.break_src == 1:
-            source_env = get_twoHouses_env(damaged_battery=True, seed=args.seed).env
-            target_env = get_twoHouses_env(damaged_battery=False, seed=args.seed).env
+            source_env = get_twoHouses_env(damaged_battery=True, seed=args.seed, fixed_start=args.fixed_start).env
+            target_env = get_twoHouses_env(damaged_battery=False, seed=args.seed, fixed_start=args.fixed_start).env
         else:
-            source_env = get_twoHouses_env(damaged_battery=False, seed=args.seed).env
-            target_env = get_twoHouses_env(damaged_battery=True, seed=args.seed).env
-
+            source_env = get_twoHouses_env(damaged_battery=False, seed=args.seed, fixed_start=args.fixed_start).env
+            target_env = get_twoHouses_env(damaged_battery=True, seed=args.seed, fixed_start=args.fixed_start).env
 
     # Get dimensions from the source environment.
     state_dim = source_env.observation_space.shape[0]
@@ -259,7 +264,7 @@ def main():
             source_env, target_env, "cpu", ent_adj=True,
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
-            savefolder=save_model_path, running_mean=running_state,
+            running_mean=running_state,
             if_normalize=False, delta_r_scale=args.deltar,
             noise_scale=args.noise, warmup_games=args.warmup,
             log_dir=log_dir, seed=args.seed
@@ -270,7 +275,7 @@ def main():
             source_env, target_env, "cpu", ent_adj=True,
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
-            savefolder=save_model_path, running_mean=running_state,
+            running_mean=running_state,
             if_normalize=False, delta_r_scale=args.deltar,
             noise_scale=args.noise, warmup_games=args.warmup,
             log_dir=log_dir, seed=args.seed
@@ -290,8 +295,9 @@ def main():
     print("Saving Vanilla SAC model to:", vanilla_save_model_path)
     print("TensorBoard logs for vanilla SAC will be saved in:", vanilla_log_dir)
 
-    model_vanilla = ContSAC(policy_config, value_config, target_env, 
-        "cpu", log_dir=vanilla_log_dir, running_mean=running_state,
+    model_vanilla = ContSAC(
+        policy_config, value_config, target_env, 
+        "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise,
         warmup_games=args.warmup, batch_size=args.bs, lr=args.lr, 
         ent_adj=False, n_updates_per_train=args.update, max_steps=args.max_steps,
         seed=args.seed
@@ -301,10 +307,10 @@ def main():
     model_vanilla.save_model(vanilla_save_model_path)
 
     ############ NO NECESSARY ####################
-    #mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
-    #mpc = MPC(target_env_mpc, save_dir=mpc_save_model_path,seed=args.seed)
-    #mpc.train()
-    #Save is automatic with run in mpc
+    # mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
+    # mpc = MPC(target_env_mpc, save_dir=mpc_save_model_path, seed=args.seed)
+    # mpc.train()
+    # Save is automatic with run in mpc
 
 if __name__ == '__main__':
     main()

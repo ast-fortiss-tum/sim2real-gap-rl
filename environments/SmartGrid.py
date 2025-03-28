@@ -36,7 +36,7 @@ class SmartGridBasic:
                  policy_path=None,
                  horizon=timedelta(hours=24),
                  frequency=timedelta(minutes=60),
-                 fixed_start="27.11.2016",
+                 fixed_start=None,
                  capacity=3,
                  data_path=None,
                  seed=42,
@@ -136,7 +136,10 @@ class SmartGridBasic:
                 forecast_horizon=self.horizon,
                 control_horizon=self.horizon,
             )
-            self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            if self.fixed_start is not None:
+                self.trainer.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            else:
+                self.trainer.fixed_start = None
             self.trainer.prepare_run()
             self.env = self.trainer.env
         else:
@@ -148,7 +151,8 @@ class SmartGridBasic:
                 forecast_horizon=self.horizon,
                 control_horizon=self.horizon,
             )
-            self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            if self.fixed_start is not None:
+                self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
             self.runner.prepare_run()
             self.env = self.runner.env
 
