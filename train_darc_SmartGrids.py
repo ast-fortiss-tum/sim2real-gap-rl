@@ -147,7 +147,7 @@ def construct_log_dir(args, prefix="DARC"):
         log_subfolder = (f"{prefix}_fs_{fs}_broken_{args.broken}_break_src_{args.break_src}_"
                          f"noise_{args.noise}_seed_{args.seed}_{args.env_name}")
     log_dir = os.path.join(base_log_dir, log_subfolder)
-    os.makedirs(log_dir, exist_ok=True)
+    #os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
 def main():

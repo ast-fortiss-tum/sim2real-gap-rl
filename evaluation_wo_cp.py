@@ -22,7 +22,9 @@ from utils import ZFilter  # Assuming ZFilter is defined in utils
 # Folder Construction Helpers
 #############################
 def construct_save_model_path(args, prefix):
-    fs = args.fixed_start.replace('.', '-')
+    fs = args.fixed_start
+    if args.fixed_start is not None:
+        fs = args.fixed_start.replace('.', '-')
     filename = f"{prefix}_{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_seed{args.seed}_"
     if args.broken == 0:
         filename += f"lin_src{args.lin_src}_variety{args.variety_name}_"
@@ -39,7 +41,9 @@ def construct_save_model_path(args, prefix):
 
 def construct_log_dir(args, prefix):
     base_log_dir = "eval_runs_2"
-    fs = args.fixed_start.replace('.', '-')
+    fs = args.fixed_start
+    if args.fixed_start is not None:
+        fs = args.fixed_start.replace('.', '-')
     if args.broken == 0:
         log_subfolder = (f"{prefix}_fs_{fs}_lin_src_{args.lin_src}_variety_{args.variety_name}_"
                          f"noise_{args.noise}_seed_{args.seed}_")
@@ -173,7 +177,7 @@ def parse_args():
                         help='Random seed')
     parser.add_argument('--env-name', type=str, default="Smart_Grids",
                         help='Name of environment (Smart_Grids only)')
-    parser.add_argument('--fixed-start', type=str, default="27.11.2016",
+    parser.add_argument('--fixed-start', type=str, default=None,
                         help='Fixed start date (format DD.MM.YYYY)')
     parser.add_argument('--broken', type=int, choices=[0, 1], default=0,
                         help='Broken flag: 0 for one-house, 1 for two-house')
@@ -385,7 +389,9 @@ def main():
     
     # Build a figure filename that encodes the key hyperparameters.
     # (This follows a similar format to the model folder names.)
-    fs = args.fixed_start.replace('.', '-')
+    fs = args.fixed_start
+    if args.fixed_start is not None:
+        fs = args.fixed_start.replace('.', '-')
     fig_filename = f"{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_seed{args.seed}_"
     if args.broken == 0:
         fig_filename += f"lin_src{args.lin_src}_variety{args.variety_name}_"
