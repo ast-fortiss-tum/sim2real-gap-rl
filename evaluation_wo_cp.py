@@ -221,9 +221,9 @@ def main():
     
     # If model folder paths are not provided, compute them from hyperparameters.
     if not args.contsac_model_folder:
-        args.contsac_model_folder = construct_save_model_path(args, prefix="ContSAC")
+        args.contsac_model_folder = construct_save_model_path(args, prefix="saved_models_experiments_2/ContSAC_test_run")
     if not args.darc_model_folder:
-        args.darc_model_folder = construct_save_model_path(args, prefix="DARC")
+        args.darc_model_folder = construct_save_model_path(args, prefix="saved_models_experiments_2/DARC_test_run")
     
     log_dir_DARC = construct_log_dir(args, prefix="DARC")
     log_dir_ContSAC = construct_log_dir(args, prefix="ContSAC")

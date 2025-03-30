@@ -14,7 +14,7 @@ SAVE_MODEL="./saved_models_experiments_2/"
 SAVE_FILE_NAME="test_run_"
 SEED=42  # Seed value included
 #FIXED_START="27.11.2016"   # Fixed start date
-FIXED_START = None
+#FIXED_START=None
 
 echo "Starting experiments for Smart Grids..."
 
@@ -31,7 +31,6 @@ for lin_src in 0 1; do
         echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"
         python3 train_darc_SmartGrids.py \
           --env-name ${ENV_NAME} \
-          --fixed-start ${FIXED_START} \
           --broken 0 \
           --lin_src ${lin_src} \
           --variety-name ${variety} \
@@ -59,7 +58,6 @@ for lin_src in 0 1; do
       echo "Running one-house (capacity): broken=0, lin_src=${lin_src}, variety=lc, capacity=${capacity}, noise=${noise}"
       python3 train_darc_SmartGrids.py \
         --env-name ${ENV_NAME} \
-        --fixed-start ${FIXED_START} \
         --broken 0 \
         --lin_src ${lin_src} \
         --variety-name lc \
@@ -86,7 +84,6 @@ for lin_src in 0 1; do
       echo "Running one-house (p_lim): broken=0, lin_src=${lin_src}, variety=lp, p_lim=${p_lim}, noise=${noise}"
       python3 train_darc_SmartGrids.py \
         --env-name ${ENV_NAME} \
-        --fixed-start ${FIXED_START} \
         --broken 0 \
         --lin_src ${lin_src} \
         --variety-name lp \
@@ -114,7 +111,6 @@ for break_src in 0 1; do
     echo "Running two-house: broken=1, break_src=${break_src}, noise=${noise}"
     python3 train_darc_SmartGrids.py \
       --env-name ${ENV_NAME} \
-      --fixed-start ${FIXED_START} \
       --broken 1 \
       --break_src ${break_src} \
       --noise ${noise} \

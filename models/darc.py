@@ -342,9 +342,10 @@ class DARC_two(ContSAC):
                  log_dir="", memory_size=1e5, warmup_games=50, batch_size=64, lr=0.0001, gamma=0.99,
                  tau=0.003, alpha=0.2, ent_adj=False, delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0,
                  target_update_interval=1, n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200, if_normalize=False, print_on=False, seed=42):
-        super(DARC_two, self).__init__(policy_config, value_config, source_env, device, log_dir, None,
-                                       memory_size, None, batch_size, lr, gamma, tau,
-                                       alpha, ent_adj, target_update_interval, None, n_updates_per_train,seed=seed)
+        
+        super(DARC_two, self).__init__(policy_config, value_config, source_env, device, log_dir, running_mean, noise_scale,
+                                memory_size, warmup_games, batch_size, lr, gamma, tau,
+                                alpha, ent_adj, target_update_interval, n_games_til_train, n_updates_per_train, max_steps)
         
         # Set the seed for reproducibility if provided
         if seed is not None:
