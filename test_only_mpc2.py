@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import numpy as np
 from tqdm import tqdm
+import time
 
 # Import the environment creation function from your customized environments module.
 # We assume that get_new_all_eff_env now returns the full SmartGrid_Linear instance.
@@ -73,9 +74,9 @@ def extract_cost_soc(history, m1, n1, e1):
     dispatch_cost = history.get_history_for_element(n1, name='cost')
     total_cost = [
         (power_import_cost[t][0], power_import_cost[t][1] + dispatch_cost[t][1])
-        for t in range(len(power_import_cost) - 1)  # Exclude the last value
+        for t in range(len(power_import_cost)) 
     ]
-    soc = history.get_history_for_element(e1, name="soc")[:-1]  # Exclude the last value
+    soc = history.get_history_for_element(e1, name="soc") 
     return total_cost, soc
 
 def plot_comparisons(oc_cost, oc_soc):
@@ -93,7 +94,7 @@ def plot_comparisons(oc_cost, oc_soc):
 
     # SOC Comparison
     plt.figure()
-    plt.plot(range(len(oc_soc)), [-x[1] for x in oc_soc], label="Optimal Control SOC", marker="o")
+    plt.plot(range(len(oc_soc)), [x[1] for x in oc_soc], label="Optimal Control SOC", marker="o")
     plt.xticks(rotation=45)
     plt.xlabel("Timestamp")
     plt.ylabel("State of Charge (SOC)")
@@ -126,10 +127,11 @@ def evaluate_mpc(sys, m1, n1, e1, fixed_start, horizon, num_games=10, base_seed=
     for episode in tqdm(range(num_games), desc="Evaluating MPC episodes"):
         current_seed = base_seed + episode  # Increment seed for each run
         oc_history = run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, current_seed)
-        cost_series = get_adjusted_cost(oc_history, sys)  # List of cost per timestep
+        cost_series = get_adjusted_cost(oc_history, sys)[:-1]  # List of cost per timestep
         daily_cost = sum(cost_series)
         all_daily_costs.append(daily_cost)
         cost_series_all.append(cost_series)
+
     avg_daily_cost = np.mean(all_daily_costs)
     std_daily_cost = np.std(all_daily_costs)
     
@@ -143,7 +145,7 @@ def evaluate_mpc(sys, m1, n1, e1, fixed_start, horizon, num_games=10, base_seed=
 def main():
     eval_seed = 43
 
-    SG = get_new_all_eff_env(degree=0.5, rl=False, seed=eval_seed)
+    SG = get_new_all_eff_env(degree=0.5, rl=False, seed=eval_seed) # To be selected depending on the environment tested in DARC and ContSAC code!!
     sys = SG.sys
     m1 = SG.m1
     n1 = SG.n1
@@ -155,7 +157,7 @@ def main():
     # Evaluate MPC (Optimal Controller) over multiple experiments
     (avg_daily_cost, all_daily_costs, std_daily_cost,
      avg_cost_per_time, std_cost_per_time) = evaluate_mpc(sys, m1, n1, e1, fixed_start, horizon,
-                                                         num_games=10, base_seed=42)
+                                                         num_games=2, base_seed=42)
 
     print("MPC Evaluation Results:")
     print("Average Daily Cost:", avg_daily_cost)
@@ -176,7 +178,25 @@ def main():
     # Optionally, run one deployment to extract and plot cost and SOC comparisons.
     oc_history = run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed)
     oc_total_cost, oc_soc = extract_cost_soc(oc_history, m1, n1, e1)
+    print("Optimal Control Cost:", [x[1] for x in oc_total_cost])
     plot_comparisons(oc_total_cost, oc_soc)
+
+    # Create timesteps for the x-axis (from 1 to 24)
+    timesteps = np.arange(1, len(avg_cost_per_time) + 1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(timesteps, avg_cost_per_time, label="Average Cost per Timestep", color="blue", marker='o')
+    plt.fill_between(timesteps, 
+                    avg_cost_per_time - std_cost_per_time, 
+                    avg_cost_per_time + std_cost_per_time,
+                    color="blue", alpha=0.3)
+    plt.xlabel("Timestep")
+    plt.ylabel("Average Cost per Timestep")
+    plt.title("Average Cost per Timestep vs Timestep during Evaluation")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     main()

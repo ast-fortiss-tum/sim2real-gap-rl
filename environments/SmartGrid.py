@@ -126,6 +126,8 @@ class SmartGridBasic:
 
     def setup_runner_trainer(self, rl=True):
         # --- Setup the Trainer or Runner ---
+        #self.sys.controllers = []
+        print("Controllers in system:", self.sys.controllers)
         if rl:
             self.runner = None
             self.trainer = BaseTrainer(
@@ -153,6 +155,8 @@ class SmartGridBasic:
             )
             if self.fixed_start is not None:
                 self.runner.fixed_start = datetime.strptime(self.fixed_start, "%d.%m.%Y")
+            else:
+                self.runner.fixed_start = None
             self.runner.prepare_run()
             self.env = self.runner.env
 
