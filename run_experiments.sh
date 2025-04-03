@@ -10,9 +10,9 @@ BS=12
 UPDATE=1
 DELTAR=1
 ENV_NAME="Smart_Grids"
-SAVE_MODEL="./saved_models_experiments_2/"
+SAVE_MODEL="./saved_models_experiments_3/"
 SAVE_FILE_NAME="test_run_"
-SEED=42  # Seed value included
+SEED=128  # Seed value included
 #FIXED_START="27.11.2016"   # Fixed start date
 #FIXED_START=None
 
