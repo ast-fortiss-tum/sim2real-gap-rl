@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 # Import the environment creation function from your customized environments module.
 # We assume that get_simple_linear_env now returns the full SmartGrid_Linear instance.
-from environments.get_customized_envs import get_simple_linear_env
+from environments.get_customized_envs import *
 
 # Import models, policies, networks, etc.
 from models.sac import ContSAC
@@ -42,9 +42,14 @@ import tensorboard
 # ----------------------------
 # Helper functions
 # ----------------------------
+N_STEPS = 24
+EVAL_SEED = 42
+
 def run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed):
     """Run deployment using the Optimal Controller."""
     oc_history = ModelHistory([sys])
+    sys.controllers = {}
+    print(sys.controllers)
     oc_deployer = DeploymentRunner(
         sys=sys,
         global_controller=OptimalController('global'),
@@ -53,7 +58,8 @@ def run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed):
         history=oc_history,
         seed=eval_seed
     )
-    oc_deployer.run(n_steps=24, fixed_start=fixed_start)
+    print(oc_deployer.seed)
+    oc_deployer.run(n_steps=N_STEPS, fixed_start=fixed_start)
     print("Optimal controller used:", oc_deployer.controllers)
     return oc_history
 
@@ -76,7 +82,7 @@ def run_custom_deployment(sys, m1, n1, e1, fixed_start, horizon, eval_seed, alg_
         history=history,
         seed=eval_seed
     )
-    deployer.run(n_steps=24, fixed_start=fixed_start)
+    deployer.run(n_steps=N_STEPS, fixed_start=fixed_start)
     print(f"{agent_name} controller used:", deployer.controllers)
     return history
 
@@ -124,15 +130,22 @@ def plot_comparisons(oc_cost, cont_cost, darc_cost, oc_soc, cont_soc, darc_soc):
 # ----------------------------
 def main():
     # Simulation configuration
-    n_hours = 24
+    n_hours = N_STEPS 
     horizon = timedelta(hours=n_hours)
     fixed_start = datetime(2016, 11, 27)
     training_seed = 42  # for reproducibility in training
-    eval_seed = 5       # evaluation seed
+    eval_seed = EVAL_SEED
+    lin_src = 1
+    variety = "v"
+    degree = 0.5
+    noise = 0.0
 
     # Use the factory function to create the smart grid environment.
     # The factory function now returns the full SmartGrid instance.
+    
+    'To be updated with the correct function call depending on the hyperparameters'
     env_instance = get_simple_linear_env(training_seed, rl=True)
+    env_instance_mpc = get_simple_linear_env(training_seed, rl=False)
     
     # Extract system and key components from the instance.
     sys = env_instance.sys
@@ -140,8 +153,14 @@ def main():
     m1 = env_instance.m1
     e1 = env_instance.e1
 
+    sys_mpc = env_instance_mpc.sys
+    n1_mpc = env_instance_mpc.n1
+    m1_mpc = env_instance_mpc.m1
+    e1_mpc = env_instance_mpc.e1
+
     sys.pprint()
     print("Controllers:", sys.controllers)
+    print("MPC:", sys_mpc.controllers)
 
     # ----------------------------
     # Configuration for Customized SAC Controllers
@@ -168,12 +187,12 @@ def main():
     }
 
     # Define the saved paths for each customized controller (update these paths as needed)
-    saved_path_cont_sac = (
-        "/home/cubos98/Desktop/MA/DARAIL/saved_weights/saved_models_experiments_2/ContSAC_test_run__fsNone_lr0.0008_noise0.0_seed42_lin_src1_varietyv_degree0.8_Smart_Grids"
-    )
-    saved_path_darc = (
-        "/home/cubos98/Desktop/MA/DARAIL/saved_weights/saved_models_experiments_2/DARC_test_run__fsNone_lr0.0008_noise0.0_seed42_lin_src1_varietyv_degree0.8_Smart_Grids"
-    )
+
+
+    'To be updated with the correct paths depending on the hyperparameters'
+    pre_path = "/home/cubos98/Desktop/MA/DARAIL/saved_weights/saved_models_experiments_2/"
+    saved_path_cont_sac = (pre_path + f"ContSAC_test_run__fsNone_lr0.0008_noise{noise}_seed42_lin_src{lin_src}_variety{variety}_degree{degree}_Smart_Grids")
+    saved_path_darc = (pre_path + f"DARC_test_run__fsNone_lr0.0008_noise{noise}_seed42_lin_src{lin_src}_variety{variety}_degree{degree}_Smart_Grids")
 
     alg_config_custom_cont_sac = ContSACConfig(
         policy_config=policy_config,
@@ -206,7 +225,7 @@ def main():
     # ----------------------------
     # Run Deployments
     # ----------------------------
-    oc_history = run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed)
+    oc_history = run_optimal_control(sys_mpc, m1_mpc, n1_mpc, e1_mpc, fixed_start, horizon, eval_seed)
     custom_cont_sac_history = run_custom_deployment(
         sys, m1, n1, e1, fixed_start, horizon, eval_seed, alg_config_custom_cont_sac, "CustomContSAC"
     )
@@ -227,6 +246,7 @@ def main():
     daily_cost_oc = sum(get_adjusted_cost(oc_history, sys))
     daily_cost_cont = sum(get_adjusted_cost(custom_cont_sac_history, sys))
     daily_cost_darc = sum(get_adjusted_cost(custom_darc_history, sys))
+
     print("Daily cost:")
     print(f" Optimal Control: {daily_cost_oc}")
     print(f" CustomContSAC:   {daily_cost_cont}")

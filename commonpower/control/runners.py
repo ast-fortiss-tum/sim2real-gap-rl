@@ -510,7 +510,9 @@ class DeploymentRunner(BaseRunner):
         # set train flag of environment to False
         self.env.unwrapped.set_mode("deploy")
         # set train flag of RL runners to False
+        
         for rl_ctrl in self.rl_controllers.values():
+            print(f"Setting mode of {rl_ctrl} to deploy")
             rl_ctrl.set_mode("deploy")
             # load RL policies
             self.alg_config.seed = self.seed  # need to hand over the seed to re-load the policy
