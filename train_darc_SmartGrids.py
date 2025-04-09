@@ -3,8 +3,8 @@ import gymnasium as gym
 from datetime import datetime, timedelta
 #from models.darc import DARC, DARC_two
 #from models.sac import ContSAC
-from models.darcNew import DARC, DARC_two
-from models.sacNew import ContSAC
+from models.darc import DARC, DARC_two
+from models.sac import ContSAC
 from models.mpc import MPC
 from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
