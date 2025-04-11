@@ -15,7 +15,7 @@ from tensor_writer import TensorWriter
 
 class ContSAC:
     def __init__(self, policy_config, value_config, env, device, log_dir="", running_mean=None,
-                 noise_scale=0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, 
+                 noise_scale=0.0, bias =0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, 
                  tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, n_games_til_train=1, 
                  n_updates_per_train=1, max_steps=200, seed=None):
         # Set the global seed if provided for reproducibility
@@ -26,6 +26,7 @@ class ContSAC:
         self.gamma = gamma
         self.batch_size = batch_size
         self.noise_scale = noise_scale  # New parameter for observational noise
+        self.bias = bias
 
         path = 'runs/' + log_dir
         if not os.path.exists(path):

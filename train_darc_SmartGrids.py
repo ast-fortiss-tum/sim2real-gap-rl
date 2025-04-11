@@ -3,8 +3,9 @@ import gymnasium as gym
 from datetime import datetime, timedelta
 #from models.darc import DARC, DARC_two
 #from models.sac import ContSAC
-from models.darc import DARC, DARC_two
-from models.sac import ContSAC
+#from models.darc_denoise import DARC, DARC_two
+from models.darc_refactored import DARC_one, DARC_two
+from models.sac_denoise import ContSAC
 from models.mpc import MPC
 from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
@@ -90,10 +91,8 @@ def parse_args():
     parser.add_argument('--classifier', type=int, default=32,
                         help='Size of classifier network layers')
     
-    parser.add_argument("--fft", action="store_true",
-                        help="Use FFT for the input data")
-    parser.add_argument("--kalman", action="store_true",
-                        help="Use Kalman filter for the input data")
+    parser.add_argument('--bias', type=float, default=0.5,
+                        help='Bias for unknown noise')
     
     parser.add_argument("--learn_smoother", action="store_true",
                         help="Learn the smoother parameters")
@@ -135,17 +134,17 @@ def construct_save_model_path(args, prefix="DARC"):
         filename += args.env_name
     else:
         filename += f"broken{args.broken}_break_src{args.break_src}_{args.env_name}"
-    
-    # Append smoother name if one is used.
-    smoother = ""
-    if args.fft:
-        smoother += "FFT"
-    if args.kalman:
-        smoother += "KF"
-    if args.learn_smoother:
-        smoother += "Learnable"
-    if smoother != "":
-        filename += f"_{smoother}"
+    if False:
+        # Append smoother name if one is used.
+        smoother = ""
+        if args.fft:
+            smoother += "FFT"
+        if args.kalman:
+            smoother += "KF"
+        if args.learn_smoother:
+            smoother += "Learnable"
+        if smoother != "":
+            filename += f"_{smoother}"
 
     return os.path.join(args.save_model, filename)
 
@@ -168,16 +167,18 @@ def construct_log_dir(args, prefix="DARC"):
     else:
         log_subfolder = (f"{prefix}_fs_{fs}_broken_{args.broken}_break_src_{args.break_src}_"
                          f"noise_{args.noise}_seed_{args.seed}_{args.env_name}")
-    # Append smoother name if one is used.
-    smoother = ""
-    if args.fft:
-        smoother += "FFT"
-    if args.kalman:
-        smoother += "KF"
-    if args.learn_smoother:
-        smoother += "Learnable"
-    if smoother != "":
-        log_subfolder += f"_{smoother}"
+    
+    if False:
+        # Append smoother name if one is used.
+        smoother = ""
+        if args.fft:
+            smoother += "FFT"
+        if args.kalman:
+            smoother += "KF"
+        if args.learn_smoother:
+            smoother += "Learnable"
+        if smoother != "":
+            log_subfolder += f"_{smoother}"
     log_dir = os.path.join(base_log_dir, log_subfolder)
     #os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -291,15 +292,15 @@ def main():
 
     # Instantiate DARC (or DARC_two) using the constructed paths.
     if args.broken == 0:
-        model = DARC(
+        model = DARC_one(
             policy_config, value_config, sa_config, sas_config,
             source_env, target_env, "cpu", ent_adj=True,
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
             if_normalize=False, delta_r_scale=args.deltar,
-            noise_scale=args.noise, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed, use_fft=args.fft, use_kf=args.kalman, smoothers_learnable=args.learn_smoother
+            noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
+            log_dir=log_dir, seed=args.seed,
         )
     else:
         model = DARC_two(
@@ -309,8 +310,8 @@ def main():
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
             if_normalize=False, delta_r_scale=args.deltar,
-            noise_scale=args.noise, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed, use_fft=args.fft, use_kf=args.kalman, smoothers_learnable=args.learn_smoother
+            noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
+            log_dir=log_dir, seed=args.seed
         )
 
     model.train(args.train_steps, deterministic=False)

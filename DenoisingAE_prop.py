@@ -91,90 +91,94 @@ class DenoisingAutoencoder(nn.Module):
 # ------------------------------
 # 3. Prepare the Dataset, Split Into Train and Validation, Create DataLoaders
 # ------------------------------
-dataset_path_clean = 'clean_dataset.npy'
-dataset_path_noisy = 'noisy_dataset.npy'
+def main():
+    dataset_path_clean = 'clean_dataset.npy'
+    dataset_path_noisy = 'noisy_dataset.npy'
 
-full_dataset = DenoisingDataset(dataset_path_clean, dataset_path_noisy)
-total_samples = len(full_dataset)
+    full_dataset = DenoisingDataset(dataset_path_clean, dataset_path_noisy)
+    total_samples = len(full_dataset)
 
-# Define a split ratio, e.g., 80% for training and 20% for validation.
-train_ratio = 0.8
-train_size = int(total_samples * train_ratio)
-val_size = total_samples - train_size
+    # Define a split ratio, e.g., 80% for training and 20% for validation.
+    train_ratio = 0.8
+    train_size = int(total_samples * train_ratio)
+    val_size = total_samples - train_size
 
-train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-print(f"Total samples: {total_samples}, Training: {train_size}, Validation: {val_size}")
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    print(f"Total samples: {total_samples}, Training: {train_size}, Validation: {val_size}")
 
-batch_size = 25
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    batch_size = 25
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-# ------------------------------
-# 4. Set Up the Training with Early Stopping and LR Scheduler
-# ------------------------------
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = DenoisingAutoencoder(cnn_channels=16, lstm_hidden_dim=32, decoder_hidden_dim=32, num_layers=1)
-model = model.to(device)
+    # ------------------------------
+    # 4. Set Up the Training with Early Stopping and LR Scheduler
+    # ------------------------------
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = DenoisingAutoencoder(cnn_channels=16, lstm_hidden_dim=32, decoder_hidden_dim=32, num_layers=1)
+    model = model.to(device)
 
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-# Use ReduceLROnPlateau: if validation loss does not improve for 10 epochs, reduce lr by a factor of 0.5.
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    # Use ReduceLROnPlateau: if validation loss does not improve for 10 epochs, reduce lr by a factor of 0.5.
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
 
-num_epochs = 1000        # Maximum number of epochs
-patience = 20           # Early stopping patience: stop if no improvement for 20 epochs
-best_val_loss = float('inf')
-epochs_no_improve = 0
+    num_epochs = 1000        # Maximum number of epochs
+    patience = 20           # Early stopping patience: stop if no improvement for 20 epochs
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
 
-print("Starting training with early stopping and LR scheduler...")
-for epoch in range(num_epochs):
-    # --- Training Phase ---
-    model.train()
-    train_loss = 0.0
-    for batch_idx, (x_noisy, x_clean) in enumerate(train_loader):
-        x_noisy = x_noisy.to(device)   # (batch, 24, 1)
-        x_clean = x_clean.to(device)
-        optimizer.zero_grad()
-        recon = model(x_noisy)
-        loss = criterion(recon, x_clean)
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item()
-    avg_train_loss = train_loss / len(train_loader)
-    
-    # --- Validation Phase ---
-    model.eval()
-    val_loss = 0.0
-    with torch.no_grad():
-        for x_noisy, x_clean in val_loader:
-            x_noisy = x_noisy.to(device)
+    print("Starting training with early stopping and LR scheduler...")
+    for epoch in range(num_epochs):
+        # --- Training Phase ---
+        model.train()
+        train_loss = 0.0
+        for batch_idx, (x_noisy, x_clean) in enumerate(train_loader):
+            x_noisy = x_noisy.to(device)   # (batch, 24, 1)
             x_clean = x_clean.to(device)
+            optimizer.zero_grad()
             recon = model(x_noisy)
             loss = criterion(recon, x_clean)
-            val_loss += loss.item()
-    avg_val_loss = val_loss / len(val_loader)
-    
-    print(f"Epoch [{epoch+1}/{num_epochs}]  Train Loss: {avg_train_loss:.4f}  Val Loss: {avg_val_loss:.4f}")
-    
-    # Step the LR scheduler using the validation loss.
-    scheduler.step(avg_val_loss)
-    
-    # --- Early Stopping Check ---
-    if avg_val_loss < best_val_loss:
-        best_val_loss = avg_val_loss
-        epochs_no_improve = 0
-        torch.save(model.state_dict(), "best_denoising_autoencoder.pth")
-        print("  Validation loss improved. Model saved.")
-    else:
-        epochs_no_improve += 1
-        print(f"  No improvement for {epochs_no_improve} epoch(s).")
-    
-    if epochs_no_improve >= patience:
-        print("Early stopping triggered.")
-        break
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        avg_train_loss = train_loss / len(train_loader)
+        
+        # --- Validation Phase ---
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for x_noisy, x_clean in val_loader:
+                x_noisy = x_noisy.to(device)
+                x_clean = x_clean.to(device)
+                recon = model(x_noisy)
+                loss = criterion(recon, x_clean)
+                val_loss += loss.item()
+        avg_val_loss = val_loss / len(val_loader)
+        
+        print(f"Epoch [{epoch+1}/{num_epochs}]  Train Loss: {avg_train_loss:.4f}  Val Loss: {avg_val_loss:.4f}")
+        
+        # Step the LR scheduler using the validation loss.
+        scheduler.step(avg_val_loss)
+        
+        # --- Early Stopping Check ---
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            epochs_no_improve = 0
+            torch.save(model.state_dict(), "best_denoising_autoencoder.pth")
+            print("  Validation loss improved. Model saved.")
+        else:
+            epochs_no_improve += 1
+            print(f"  No improvement for {epochs_no_improve} epoch(s).")
+        
+        if epochs_no_improve >= patience:
+            print("Early stopping triggered.")
+            break
 
-print("Training complete.")
+    print("Training complete.")
 
-# Load the best model (optional)
-model.load_state_dict(torch.load("best_denoising_autoencoder.pth"))
-print("Best model loaded.")
+    # Load the best model (optional)
+    model.load_state_dict(torch.load("best_denoising_autoencoder.pth"))
+    print("Best model loaded.")
+
+if __name__ == "__main__":
+    main()
