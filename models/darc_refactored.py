@@ -103,8 +103,8 @@ class BaseDARC(ContSAC):
             if i < self.warmup_games or i % self.s_t_ratio == 0:
                 target_reward, target_step = self.simulate_env(i, "target", deterministic)
                 self.writer.add_scalar('Target Env/Rewards', target_reward, i)
-                self.writer.add_scalar('Target Env/N_Steps', self.target_step, i)
-                print("TARGET: index: {}, steps: {}, total_rewards: {}".format(i, self.target_step, target_reward))
+                self.writer.add_scalar('Target Env/N_Steps', target_step, i)
+                print("TARGET: index: {}, steps: {}, total_rewards: {}".format(i, target_step, target_reward))
             
             if i >= self.warmup_games:
                 self.writer.add_scalar('Source Env/Rewards', source_reward, i)
@@ -367,8 +367,19 @@ class DARC_one(BaseDARC):
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else 0.0
             if n_steps == self.max_steps:
                 done = True
+
+            ver_actions = env.env.sys.verified_actions
+            ver_penalties = env.env.sys.verification_penalties
+
+            ver_actions_values = [node_data['p'] 
+                                  for agent in ver_actions.values() 
+                                  for node_data in agent.values() if 'p' in node_data]
+            ver_penalties_values = [ver_penalties.values()]
+            ver_actions_values = [value for arr in ver_actions_values for value in arr]
+            ver_penalties_values = [value for dv in ver_penalties_values for value in list(dv)]
             
-            memory.add(state, action, reward, next_state, done_mask)
+            #memory.add(state, action, reward, next_state, done_mask)
+            memory.add(state, ver_actions_values, reward, next_state, done_mask)
             if env_name == "source":
                 self.source_step += 1
             elif env_name == "target":
@@ -577,7 +588,19 @@ class DARC_two(BaseDARC):
             if n_steps == self.max_steps:
                 done = True
             
-            memory.add(state, action, reward, next_state, done_mask)
+            ver_actions = env.env.sys.verified_actions
+            ver_penalties = env.env.sys.verification_penalties
+
+            ver_actions_values = [node_data['p'] 
+                                  for agent in ver_actions.values() 
+                                  for node_data in agent.values() if 'p' in node_data]
+            ver_penalties_values = [ver_penalties.values()]
+            ver_actions_values = [value for arr in ver_actions_values for value in arr]
+            ver_penalties_values = [value for dv in ver_penalties_values for value in list(dv)]
+            
+            #memory.add(state, action, reward, next_state, done_mask)
+            memory.add(state, ver_actions_values, reward, next_state, done_mask)
+
             if env_name == "source":
                 self.source_step += 1
             elif env_name == "target":
