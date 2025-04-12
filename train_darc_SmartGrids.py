@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 #from models.sac import ContSAC
 #from models.darc_denoise import DARC, DARC_two
 from models.darc_refactored import DARC_one, DARC_two
-from models.sac_denoise import ContSAC
+from models.sac_refactored import ContSAC
 from models.mpc import MPC
 from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
@@ -33,7 +33,7 @@ def parse_args():
     # Saving and training hyperparameters
     parser.add_argument('--save-model', type=str, default="",
                         help='Base path for saving the model')
-    parser.add_argument('--train-steps', type=int, default=201,
+    parser.add_argument('--train-steps', type=int, default=200,
                         help='Number of training steps')
     parser.add_argument('--max-steps', type=int, default=24,
                         help='Maximum steps per episode')
@@ -94,8 +94,14 @@ def parse_args():
     parser.add_argument('--bias', type=float, default=0.5,
                         help='Bias for unknown noise')
     
-    parser.add_argument("--learn_smoother", action="store_true",
-                        help="Learn the smoother parameters")
+    parser.add_argument('--use_denoiser', type=int, default=1,
+                        help='Use denoiser (1) or not (0)')
+    
+    parser.add_argument('--s_t_ratio', type=int, default=10,
+                        help='Ratio between source and target training steps')
+    
+    parser.add_argument('--noise_cfrs', type=float, default=0.2,
+                        help='Noise scale for the denoiser (if used)')
 
     args = parser.parse_args()
 
@@ -121,7 +127,7 @@ def construct_save_model_path(args, prefix="DARC"):
     if args.fixed_start is not None:
         fs = args.fixed_start.replace('.', '-')
     # Build a filename solely from the hyperparameters.
-    filename = f"{prefix}_{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_seed{args.seed}_"
+    filename = f"{prefix}_{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_bias{args.bias}_seed{args.seed}_noise_cfrs_{args.noise_cfrs}_use_denoiser_{args.use_denoiser}_"
     if args.broken == 0:
         # One-house experiments: include linear source flag and variety.
         filename += f"lin_src{args.lin_src}_variety{args.variety_name}_"
@@ -155,8 +161,8 @@ def construct_log_dir(args, prefix="DARC"):
     if args.fixed_start is not None:
         fs = args.fixed_start.replace('.', '-')
     if args.broken == 0:
-        log_subfolder = (f"{prefix}_fs_{fs}_lin_src_{args.lin_src}_variety_{args.variety_name}_"
-                         f"noise_{args.noise}_seed_{args.seed}_")
+        log_subfolder = (f"{prefix}_{args.save_file_name}_fs_{fs}_lin_src_{args.lin_src}_variety_{args.variety_name}_"
+                         f"noise_{args.noise}_bias_{args.bias}_seed_{args.seed}_noise_cfrs_{args.noise_cfrs}_use_denoiser_{args.use_denoiser}_")
         if args.variety_name in ['s', 'c', 'd'] or args.variety_name.startswith('v'):
             log_subfolder += f"degree_{args.degree}_"
         elif args.variety_name == 'lc':
@@ -166,7 +172,7 @@ def construct_log_dir(args, prefix="DARC"):
         log_subfolder += f"{args.env_name}"
     else:
         log_subfolder = (f"{prefix}_fs_{fs}_broken_{args.broken}_break_src_{args.break_src}_"
-                         f"noise_{args.noise}_seed_{args.seed}_{args.env_name}")
+                         f"noise_{args.noise}_seed_{args.seed}_noise_cfrs_{args.noise_cfrs}_use_denoiser_{args.use_denoiser}_{args.env_name}")
     
     if False:
         # Append smoother name if one is used.
@@ -298,9 +304,9 @@ def main():
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
-            if_normalize=False, delta_r_scale=args.deltar,
+            if_normalize=False, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
             noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed,
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, noise_cfrs=args.noise_cfrs
         )
     else:
         model = DARC_two(
@@ -309,9 +315,9 @@ def main():
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
-            if_normalize=False, delta_r_scale=args.deltar,
+            if_normalize=False, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
             noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, noise_cfrs=args.noise_cfrs
         )
 
     model.train(args.train_steps, deterministic=False)
@@ -328,15 +334,19 @@ def main():
     print("Saving Vanilla SAC model to:", vanilla_save_model_path)
     print("TensorBoard logs for vanilla SAC will be saved in:", vanilla_log_dir)
 
+    noise_indices = [100, 226] if args.broken == 1 else [100]
+
+    train_steps_SAC = int(args.train_steps / args.s_t_ratio)
+
     model_vanilla = ContSAC(
         policy_config, value_config, target_env, 
-        "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise,
+        "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise, bias=args.bias,
         warmup_games=args.warmup, batch_size=args.bs, lr=args.lr, 
         ent_adj=False, n_updates_per_train=args.update, max_steps=args.max_steps,
-        seed=args.seed, use_fft=args.fft, use_kf=args.kalman, smoothers_learnable=args.learn_smoother
+        seed=args.seed, noise_indices=noise_indices, use_denoiser=args.use_denoiser
     )
 
-    model_vanilla.train(int(args.train_steps/10), deterministic=False)
+    model_vanilla.train(train_steps_SAC, deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
 
     ############ NO NECESSARY ####################

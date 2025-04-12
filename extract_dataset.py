@@ -1,3 +1,4 @@
+import argparse
 import gymnasium as gym
 import numpy as np
 from environments.get_customized_envs import (
@@ -12,37 +13,15 @@ from environments.get_customized_envs import (
 )
 import time
 import matplotlib.pyplot as plt
-from tqdm import tqdm  # <-- import tqdm for progress bar
+from tqdm import tqdm
 
 # ------------------------------
 def generate_action_schedule(env, max_steps):
-    """
-    Generate a random sequence of actions from the given environment's action space.
-    
-    Args:
-        env: An environment with an action_space.
-        max_steps (int): Number of actions to generate.
-        
-    Returns:
-        List: A list of actions.
-    """
     return [env.action_space.sample() for _ in range(max_steps)]
 
 def collect_episode(env, action_schedule):
-    """
-    Roll out an episode on the given environment using the provided action schedule.
-    
-    Args:
-        env: An environment that follows the gym API.
-        action_schedule (list): A list of actions to take in sequence.
-        
-    Returns:
-        np.ndarray: The array of observations collected over the episode.
-    """
     obs_seq = []
-    # For this customized env, we assume the env.reset() returns a tuple.
     obs = env.reset()
-    # Notice: we select the observation at index 0 then index [100] as provided.
     obs_seq.append(obs[0][100])
     
     for action in action_schedule:
@@ -50,29 +29,10 @@ def collect_episode(env, action_schedule):
         obs_seq.append(obs[100])
         if done:
             break
-    #print(obs_seq)
-    return np.array(obs_seq)  # Convert to a numpy array for convenience
+    return np.array(obs_seq)
 
 def collect_dataset(env_clean, env_noisy, num_episodes, max_steps, action_schedule_fn=None):
-    """
-    Collect paired datasets from the clean and noisy environments.
-    
-    For each episode, a schedule of actions is generated—either using a provided function 
-    or randomly sampled from the environment's action_space. The same action schedule is 
-    used to run both env_clean and env_noisy, returning a pair of observation sequences.
-    
-    Args:
-        env_clean: The clean environment (returns clean observations).
-        env_noisy: The noisy environment (returns noisy observations).
-        num_episodes (int): Number of episodes to collect.
-        max_steps (int): Maximum time steps per episode.
-        action_schedule_fn (callable, optional): Function to generate a list of actions given env and max_steps.
-    
-    Returns:
-        List of tuples: Each tuple is (episode_clean, episode_noisy).
-    """
     dataset = []
-    # Wrap the loop with tqdm for progress tracking.
     for ep in tqdm(range(num_episodes), desc="Collecting Episodes"):
         if action_schedule_fn is None:
             action_schedule = generate_action_schedule(env_clean, max_steps)
@@ -83,49 +43,42 @@ def collect_dataset(env_clean, env_noisy, num_episodes, max_steps, action_schedu
         episode_noisy = collect_episode(env_noisy, action_schedule)
 
         dataset.append((episode_clean, episode_noisy))
-        # Uncomment the next line if you want detailed episode info printed.
-        # print(f"Episode {ep+1} collected, length (clean): {episode_clean.shape[0]}, (noisy): {episode_noisy.shape[0]}")
     
     return dataset
 
 # ------------------------------
-# Example Usage:
+# Main Execution with Argparse
 # ------------------------------
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Collect paired clean and noisy datasets.")
+    parser.add_argument("--noise", type=float, default=0.2, help="Standard deviation of Gaussian noise")
+    parser.add_argument("--bias", type=float, default=0.5, help="Bias added to observation")
+    args = parser.parse_args()
 
-# Create the clean environment.
-env_clean = get_new_all_eff_env(degree=1.0, seed=42, rl=True).env  # Clean environment
+    class NoisyWrapper(gym.ObservationWrapper):
+        def __init__(self, env, noise_std=0.2, bias=0.5):
+            super(NoisyWrapper, self).__init__(env)
+            self.noise_std = noise_std
+            self.bias = bias
+        
+        def observation(self, obs):
+            return obs + np.random.normal(0, self.noise_std, size=obs.shape) + self.bias
 
-# Create the noisy environment by wrapping the clean one.
-class NoisyWrapper(gym.ObservationWrapper):
-    def __init__(self, env, noise_std=0.2, bias=0.5):
-        super(NoisyWrapper, self).__init__(env)
-        self.noise_std = noise_std
-        self.bias = bias
-    
-    def observation(self, obs):
-        # Add Gaussian noise plus a bias to the observation
-        return obs + np.random.normal(0, self.noise_std, size=obs.shape) + self.bias
+    # Create environments
+    env_clean = get_new_all_eff_env(degree=1.0, seed=42, rl=True).env
+    env_noisy = NoisyWrapper(env_clean, noise_std=args.noise, bias=args.bias)
 
-env_noisy = NoisyWrapper(env_clean, noise_std=0.2)
+    num_episodes = 365
+    max_steps = 24
 
-# Set parameters for dataset collection.
-num_episodes = 365  # Number of episodes to collect
-max_steps = 24      # Maximum steps per episode
+    dataset = collect_dataset(env_clean, env_noisy, num_episodes, max_steps)
 
-# Collect the paired dataset.
-dataset = collect_dataset(env_clean, env_noisy, num_episodes, max_steps)
+    clean_dataset = [episode_clean for (episode_clean, _) in dataset]
+    noisy_dataset = [episode_noisy for (_, episode_noisy) in dataset]
 
-# ---------------------------------------------------
-# PART 2: SAVE THE DATASET
-# ---------------------------------------------------
-# Separate clean and noisy episodes into two lists.
-clean_dataset = [episode_clean for (episode_clean, _) in dataset]
-noisy_dataset = [episode_noisy for (_, episode_noisy) in dataset]
-
-# Save each dataset to a file.
-np.save('clean_dataset.npy', clean_dataset)
-np.save('noisy_dataset.npy', noisy_dataset)
-print("Datasets saved successfully as 'clean_dataset.npy' and 'noisy_dataset.npy'.")
+    np.save('clean_dataset.npy', clean_dataset)
+    np.save('noisy_dataset.npy', noisy_dataset)
+    print("Datasets saved successfully as 'clean_dataset.npy' and 'noisy_dataset.npy'.")
 
 # ---------------------------------------------------
 # PART 3: OPTIONAL PLOTTING OF THE OUTPUTS

@@ -175,7 +175,7 @@ def main():
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_no_improve = 0
-            torch.save(model.state_dict(), "best_online_denoising_autoencoder.pth")
+            torch.save(model.state_dict(), "best_online_denoising_autoencoder2.pth")
             print("  Validation loss improved. Model saved.")
         else:
             epochs_no_improve += 1

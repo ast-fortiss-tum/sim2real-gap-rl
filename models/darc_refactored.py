@@ -7,7 +7,7 @@ import pickle
 
 from architectures.utils import Model, gen_noise
 from replay_buffer import ReplayBuffer
-from models.sac import ContSAC, set_global_seed
+from models.sac_refactored import ContSAC, set_global_seed
 
 from online_denoising_AE import OnlineDenoisingAutoencoder, DenoisingDataset
 
@@ -20,7 +20,7 @@ class BaseDARC(ContSAC):
                  batch_size=64, lr=0.0001, gamma=0.99, tau=0.003, alpha=0.2, ent_adj=False,
                  delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0, bias=0.5, target_update_interval=1,
                  n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200,
-                 if_normalize=True, print_on=False, seed=42):
+                 if_normalize=True, print_on=False, seed=42, use_denoiser=1, noise_cfrs=0.2):
         # Set a fixed random seed if provided.
         if seed is not None:
             set_global_seed(seed)
@@ -29,25 +29,20 @@ class BaseDARC(ContSAC):
         super(BaseDARC, self).__init__(policy_config, value_config, source_env, device, log_dir,
                                        running_mean, noise_scale, bias, memory_size, warmup_games, batch_size,
                                        lr, gamma, tau, alpha, ent_adj, target_update_interval,
-                                       n_games_til_train, n_updates_per_train, max_steps)
+                                       n_games_til_train, n_updates_per_train, max_steps,noise_indices=None, use_denoiser=use_denoiser)
 
         # Save common hyperparameters
         self.delta_r_scale = delta_r_scale
         self.s_t_ratio = s_t_ratio
-        self.noise_scale = noise_scale
-        self.bias = bias
 
         self.source_env = source_env
         self.target_env = target_env
-        self.warmup_games = warmup_games
-        self.n_games_til_train = n_games_til_train
 
         self.sa_classifier = Model(sa_config).to(self.device)
         self.sa_classifier_opt = Adam(self.sa_classifier.parameters(), lr=lr)
         self.sas_adv_classifier = Model(sas_config).to(self.device)
         self.sas_adv_classifier_opt = Adam(self.sas_adv_classifier.parameters(), lr=lr)
-        self.running_mean = running_mean
-        self.max_steps = max_steps
+
         self.if_normalize = if_normalize
 
         self.source_step = 0
@@ -58,15 +53,20 @@ class BaseDARC(ContSAC):
         self.scheduler_critic = torch.optim.lr_scheduler.StepLR(self.twin_q_opt, step_size=1, gamma=decay_rate)
         self.scheduler_sa_classifier_opt = torch.optim.lr_scheduler.StepLR(self.sa_classifier_opt, step_size=1, gamma=decay_rate)
         self.scheduler_sas_adv_classifier_opt = torch.optim.lr_scheduler.StepLR(self.sas_adv_classifier_opt, step_size=1, gamma=decay_rate)
-
         self.print_on = print_on
 
+        self.noise_scale_cfrs = noise_cfrs
+
         # Load the pretrained online denoiser.
-        # (We assume the denoiser was trained with input_dim=1.)
-        self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
-        self.denoiser.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", map_location=self.device, weights_only=True))
-        print("Denoiser loaded successfully.")
-        self.denoiser.eval()
+        self.use_denoiser = use_denoiser
+
+        if self.use_denoiser:
+            self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
+            self.denoiser.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", map_location=self.device, weights_only=True))
+            print("Denoiser loaded successfully.")
+            self.denoiser.eval()
+        else:
+            self.denoiser = None
 
     # --- Methods to be specialized in child classes ---
     def add_obs_noise_percent(self, obs):
@@ -244,8 +244,8 @@ class DARC_one(BaseDARC):
                                       t_next_states[:, 100].unsqueeze(1)], dim=1)
             
             # Inject noise.
-            sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
-            sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
+            sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale_cfrs, sa_inputs, self.device))
+            sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale_cfrs, sas_inputs, self.device))
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
             sas_log_probs = torch.log(torch.softmax(sas_logits, dim=1) + 1e-12)
             
@@ -253,7 +253,7 @@ class DARC_one(BaseDARC):
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         
-        train_info = super(DARC_one, self).train_step(s_states, s_actions, s_rewards, s_next_states, s_done_masks)
+        train_info = ContSAC.train_step(self, s_states, s_actions, s_rewards, s_next_states, s_done_masks)
         
         # Rebuild classifier inputs.
         s_sa_inputs = torch.cat([s_recovered, s_actions[:, 0].unsqueeze(1)], dim=1)
@@ -261,10 +261,10 @@ class DARC_one(BaseDARC):
         t_sa_inputs = torch.cat([t_recovered, t_actions[:, 0].unsqueeze(1)], dim=1)
         t_sas_inputs = torch.cat([t_recovered, t_actions[:, 0].unsqueeze(1), t_next_states[:, 100].unsqueeze(1)], dim=1)
         
-        s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale, s_sa_inputs, self.device))
-        s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale, s_sas_inputs, self.device))
-        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale, t_sa_inputs, self.device))
-        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale, t_sas_inputs, self.device))
+        s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale_cfrs, s_sa_inputs, self.device))
+        s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale_cfrs, s_sas_inputs, self.device))
+        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale_cfrs, t_sa_inputs, self.device))
+        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale_cfrs, t_sas_inputs, self.device))
         
         loss_function = nn.CrossEntropyLoss()
         label_zero = torch.zeros(s_sa_logits.shape[0], dtype=torch.int64).to(self.device)
@@ -311,21 +311,29 @@ class DARC_one(BaseDARC):
         if self.if_normalize:
             state = self.running_mean(state)
         
+        # For target environment, optionally apply the denoiser.
         if env_name == "target":
-            # Use index 100 only.
-            real_val = state[100]
-            noisy_state = self.add_obs_noise(state)
-            noisy_val = noisy_state[100]
-            accumulated_sequence = [noisy_val]
-            acc_tensor = torch.tensor(accumulated_sequence, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-            with torch.no_grad():
-                denoised_seq, _ = self.denoiser.forward_online(acc_tensor)
-            recovered_val = denoised_seq[0, -1, :].cpu().numpy()[0]
-            state[100] = recovered_val
+            if self.use_denoiser:
+                # For denoiser: process index 100.
+                real_val = state[100]
+                noisy_state = self.add_obs_noise(state)
+                noisy_val = noisy_state[100]
+                # Initialize accumulation buffer.
+                accumulated_sequence = [noisy_val]
+                acc_tensor = torch.tensor(accumulated_sequence, dtype=torch.float32)\
+                                    .unsqueeze(0).unsqueeze(-1).to(self.device)
+                with torch.no_grad():
+                    denoised_seq, _ = self.denoiser.forward_online(acc_tensor)
+                recovered_val = denoised_seq[0, -1, :].cpu().numpy()[0]
+                state[100] = recovered_val
 
-            real_values = [real_val]
-            noisy_values = [noisy_val]
-            recovered_values = [recovered_val]
+                # For possible plotting.
+                real_values = [real_val]
+                noisy_values = [noisy_val]
+                recovered_values = [recovered_val]
+            else:
+                # If not using the denoiser, simply add noise.
+                state = self.add_obs_noise(state)
         
         while not done:
             if game_count <= self.warmup_games:
@@ -338,19 +346,23 @@ class DARC_one(BaseDARC):
                 next_state = self.running_mean(next_state)
             
             if env_name == "target":
-                real_val = next_state[100]
-                noisy_next_state = self.add_obs_noise(next_state)
-                noisy_val = noisy_next_state[100]
-                accumulated_sequence.append(noisy_val)
-                acc_tensor = torch.tensor(accumulated_sequence, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-                with torch.no_grad():
-                    denoised_seq, _ = self.denoiser.forward_online(acc_tensor)
-                recovered_val = denoised_seq[0, -1, :].cpu().numpy()[0]
-                next_state[100] = recovered_val
+                if self.use_denoiser:
+                    real_val = next_state[100]
+                    noisy_next_state = self.add_obs_noise(next_state)
+                    noisy_val = noisy_next_state[100]
+                    accumulated_sequence.append(noisy_val)
+                    acc_tensor = torch.tensor(accumulated_sequence, dtype=torch.float32)\
+                                    .unsqueeze(0).unsqueeze(-1).to(self.device)
+                    with torch.no_grad():
+                        denoised_seq, _ = self.denoiser.forward_online(acc_tensor)
+                    recovered_val = denoised_seq[0, -1, :].cpu().numpy()[0]
+                    next_state[100] = recovered_val
 
-                real_values.append(real_val)
-                noisy_values.append(noisy_val)
-                recovered_values.append(recovered_val)
+                    real_values.append(real_val)
+                    noisy_values.append(noisy_val)
+                    recovered_values.append(recovered_val)
+                else:
+                    next_state = self.add_obs_noise(next_state)
             
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else 0.0
             if n_steps == self.max_steps:
@@ -366,8 +378,9 @@ class DARC_one(BaseDARC):
             total_rewards += reward
             state = next_state
         
-        # (Optional plotting code omitted)
+        # (Optional: plotting code can be added here)
         return total_rewards, n_steps
+
 
 # ============================================================
 # DARC_two: Specializes BaseDARC for handling two observation indices (e.g. indices 100 and 226).
@@ -415,8 +428,8 @@ class DARC_two(BaseDARC):
             t_sa_inputs = torch.cat([t_recovered, t_actions], dim=1)
             t_sas_inputs = torch.cat([t_recovered, t_actions, t_next_states[:, [100, 226]]], dim=1)
             
-            sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale, sa_inputs, self.device))
-            sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale, sas_inputs, self.device))
+            sa_logits = self.sa_classifier(sa_inputs + gen_noise(self.noise_scale_cfrs, sa_inputs, self.device))
+            sas_logits = self.sas_adv_classifier(sas_inputs + gen_noise(self.noise_scale_cfrs, sas_inputs, self.device))
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
             sas_log_probs = torch.log(torch.softmax(sas_logits, dim=1) + 1e-12)
             
@@ -424,17 +437,17 @@ class DARC_two(BaseDARC):
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         
-        train_info = super(DARC_two, self).train_step(s_states, s_actions, s_rewards, s_next_states, s_done_masks)
+        train_info = ContSAC.train_step(self, s_states, s_actions, s_rewards, s_next_states, s_done_masks)
         
         s_sa_inputs = torch.cat([s_recovered, s_actions], dim=1)
         s_sas_inputs = torch.cat([s_recovered, s_actions, s_next_recovered], dim=1)
         t_sa_inputs = torch.cat([t_recovered, t_actions], dim=1)
         t_sas_inputs = torch.cat([t_recovered, t_actions, t_next_states[:, [100, 226]]], dim=1)
         
-        s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale, s_sa_inputs, self.device))
-        s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale, s_sas_inputs, self.device))
-        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale, t_sa_inputs, self.device))
-        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale, t_sas_inputs, self.device))
+        s_sa_logits = self.sa_classifier(s_sa_inputs + gen_noise(self.noise_scale_cfrs, s_sa_inputs, self.device))
+        s_sas_logits = self.sas_adv_classifier(s_sas_inputs + gen_noise(self.noise_scale_cfrs, s_sas_inputs, self.device))
+        t_sa_logits = self.sa_classifier(t_sa_inputs + gen_noise(self.noise_scale_cfrs, t_sa_inputs, self.device))
+        t_sas_logits = self.sas_adv_classifier(t_sas_inputs + gen_noise(self.noise_scale_cfrs, t_sas_inputs, self.device))
         
         loss_function = nn.CrossEntropyLoss()
         label_zero = torch.zeros(t_sa_logits.shape[0], dtype=torch.int64).to(self.device)
@@ -482,31 +495,40 @@ class DARC_two(BaseDARC):
             state = self.running_mean(state)
         
         if env_name == "target":
-            # Initialization for indices 100 and 226.
+            # For indices 100 and 226, first apply noise to state.
             real_val_100 = state[100]
             real_val_226 = state[226]
             noisy_state = self.add_obs_noise(state)
             noisy_val_100 = noisy_state[100]
             noisy_val_226 = noisy_state[226]
-            accumulated_sequence_100 = [noisy_val_100]
-            accumulated_sequence_226 = [noisy_val_226]
-            acc_tensor_100 = torch.tensor(accumulated_sequence_100, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-            with torch.no_grad():
-                denoised_seq_100, _ = self.denoiser.forward_online(acc_tensor_100)
-            recovered_val_100 = denoised_seq_100[0, -1, :].cpu().numpy()[0]
-            acc_tensor_226 = torch.tensor(accumulated_sequence_226, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-            with torch.no_grad():
-                denoised_seq_226, _ = self.denoiser.forward_online(acc_tensor_226)
-            recovered_val_226 = denoised_seq_226[0, -1, :].cpu().numpy()[0]
-            state[100] = recovered_val_100
-            state[226] = recovered_val_226
+            if self.use_denoiser:
+                # Initialize per-index accumulation buffers.
+                accumulated_sequence_100 = [noisy_val_100]
+                accumulated_sequence_226 = [noisy_val_226]
+                acc_tensor_100 = torch.tensor(accumulated_sequence_100, dtype=torch.float32)\
+                                    .unsqueeze(0).unsqueeze(-1).to(self.device)
+                with torch.no_grad():
+                    denoised_seq_100, _ = self.denoiser.forward_online(acc_tensor_100)
+                recovered_val_100 = denoised_seq_100[0, -1, :].cpu().numpy()[0]
+                acc_tensor_226 = torch.tensor(accumulated_sequence_226, dtype=torch.float32)\
+                                    .unsqueeze(0).unsqueeze(-1).to(self.device)
+                with torch.no_grad():
+                    denoised_seq_226, _ = self.denoiser.forward_online(acc_tensor_226)
+                recovered_val_226 = denoised_seq_226[0, -1, :].cpu().numpy()[0]
+                # Replace the initial state values.
+                state[100] = recovered_val_100
+                state[226] = recovered_val_226
 
-            real_values_100 = [real_val_100]
-            noisy_values_100 = [noisy_val_100]
-            recovered_values_100 = [recovered_val_100]
-            real_values_226 = [real_val_226]
-            noisy_values_226 = [noisy_val_226]
-            recovered_values_226 = [recovered_val_226]
+                # Optional plotting variables.
+                real_values_100 = [real_val_100]
+                noisy_values_100 = [noisy_val_100]
+                recovered_values_100 = [recovered_val_100]
+                real_values_226 = [real_val_226]
+                noisy_values_226 = [noisy_val_226]
+                recovered_values_226 = [recovered_val_226]
+            else:
+                # If the denoiser is not used, simply update state with noise.
+                state = noisy_state
 
         while not done:
             if game_count <= self.warmup_games:
@@ -516,31 +538,40 @@ class DARC_two(BaseDARC):
             next_state, reward, done, _, _ = env.step(action)
             if self.if_normalize:
                 next_state = self.running_mean(next_state)
+            
             if env_name == "target":
-                real_val_100 = next_state[100]
-                real_val_226 = next_state[226]
-                noisy_next_state = self.add_obs_noise(next_state)
-                noisy_val_100 = noisy_next_state[100]
-                noisy_val_226 = noisy_next_state[226]
-                accumulated_sequence_100.append(noisy_val_100)
-                accumulated_sequence_226.append(noisy_val_226)
-                acc_tensor_100 = torch.tensor(accumulated_sequence_100, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-                with torch.no_grad():
-                    denoised_seq_100, _ = self.denoiser.forward_online(acc_tensor_100)
-                recovered_val_100 = denoised_seq_100[0, -1, :].cpu().numpy()[0]
-                acc_tensor_226 = torch.tensor(accumulated_sequence_226, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
-                with torch.no_grad():
-                    denoised_seq_226, _ = self.denoiser.forward_online(acc_tensor_226)
-                recovered_val_226 = denoised_seq_226[0, -1, :].cpu().numpy()[0]
-                next_state[100] = recovered_val_100
-                next_state[226] = recovered_val_226
+                if self.use_denoiser:
+                    # Process indices 100 and 226 using the denoiser.
+                    real_val_100 = next_state[100]
+                    real_val_226 = next_state[226]
+                    noisy_next_state = self.add_obs_noise(next_state)
+                    noisy_val_100 = noisy_next_state[100]
+                    noisy_val_226 = noisy_next_state[226]
+                    # Append new noisy measurements to their respective buffers.
+                    accumulated_sequence_100.append(noisy_val_100)
+                    accumulated_sequence_226.append(noisy_val_226)
+                    acc_tensor_100 = torch.tensor(accumulated_sequence_100, dtype=torch.float32)\
+                                        .unsqueeze(0).unsqueeze(-1).to(self.device)
+                    with torch.no_grad():
+                        denoised_seq_100, _ = self.denoiser.forward_online(acc_tensor_100)
+                    recovered_val_100 = denoised_seq_100[0, -1, :].cpu().numpy()[0]
+                    acc_tensor_226 = torch.tensor(accumulated_sequence_226, dtype=torch.float32)\
+                                        .unsqueeze(0).unsqueeze(-1).to(self.device)
+                    with torch.no_grad():
+                        denoised_seq_226, _ = self.denoiser.forward_online(acc_tensor_226)
+                    recovered_val_226 = denoised_seq_226[0, -1, :].cpu().numpy()[0]
+                    next_state[100] = recovered_val_100
+                    next_state[226] = recovered_val_226
 
-                real_values_100.append(real_val_100)
-                noisy_values_100.append(noisy_val_100)
-                recovered_values_100.append(recovered_val_100)
-                real_values_226.append(real_val_226)
-                noisy_values_226.append(noisy_val_226)
-                recovered_values_226.append(recovered_val_226)
+                    real_values_100.append(real_val_100)
+                    noisy_values_100.append(noisy_val_100)
+                    recovered_values_100.append(recovered_val_100)
+                    real_values_226.append(real_val_226)
+                    noisy_values_226.append(noisy_val_226)
+                    recovered_values_226.append(recovered_val_226)
+                else:
+                    # Without denoiser, simply add noise.
+                    next_state = self.add_obs_noise(next_state)
             
             done_mask = 1.0 if n_steps == env._max_episode_steps - 1 else 0.0
             if n_steps == self.max_steps:
@@ -551,12 +582,14 @@ class DARC_two(BaseDARC):
                 self.source_step += 1
             elif env_name == "target":
                 self.target_step += 1
+            
             n_steps += 1
             total_rewards += reward
             state = next_state
-
-        # (Optional plotting code omitted)
+        
+        # (Optional: plotting code may be added here)
         return total_rewards, n_steps
+
 
     # (eval_src and eval_tgt are inherited from BaseDARC)
     # (save_model and load_model are also inherited)
