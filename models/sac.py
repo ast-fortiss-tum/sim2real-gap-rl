@@ -149,7 +149,20 @@ class ContSAC:
                     next_state = self.add_obs_noise(next_state)  # Apply noise to the next observation
 
                 done_mask = 1.0 if n_steps == self.env._max_episode_steps - 1 else float(not done)
-                self.memory.add(state, action, reward, next_state, done_mask)
+
+                ver_actions = self.env.env.sys.verified_actions
+                ver_penalties = self.env.env.sys.verification_penalties
+
+                ver_actions_values = [node_data['p'] 
+                                    for agent in ver_actions.values() 
+                                    for node_data in agent.values() if 'p' in node_data]
+                ver_penalties_values = [ver_penalties.values()]
+                ver_actions_values = [value for arr in ver_actions_values for value in arr]
+                ver_penalties_values = [value for dv in ver_penalties_values for value in list(dv)]
+                
+                #memory.add(state, action, reward, next_state, done_mask)
+                self.memory.add(state, ver_actions_values, reward, next_state, done_mask)
+                #self.memory.add(state, action, reward, next_state, done_mask)
 
                 n_steps += 1
                 total_reward += reward
