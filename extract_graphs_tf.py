@@ -273,5 +273,5 @@ fig.legend(handles, final_labels, title="Labels", loc='lower center',
 plt.tight_layout(rect=[0.05, 0.1, 0.95, 0.85])
 plt.subplots_adjust(wspace=0.3, hspace=0.8, bottom=0.2)
 
-plt.savefig("training_plots.pdf", format="pdf")
+plt.savefig("plots/training_plots.pdf", format="pdf")
 plt.show()

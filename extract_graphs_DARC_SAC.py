@@ -157,7 +157,7 @@ ax.grid(True, axis="y")
 fig.legend(*ax.get_legend_handles_labels(), loc="center right",
            bbox_to_anchor=(1.02,0.5))
 fig.tight_layout(rect=[0,0,0.95,1])
-plt.savefig("cumreward_darc_vs_sac_lines.pdf", bbox_inches="tight")
+plt.savefig("plots/cumreward_darc_vs_sac_lines.pdf", bbox_inches="tight")
 plt.show()
 
 # ------------------------------------------------------------------ #
@@ -176,7 +176,7 @@ ax2.set_xticks(x); ax2.set_xticklabels([str(d) for d in degrees])
 ax2.set_xlabel("degree"); ax2.set_ylabel("Mean Final Cumulative Reward")
 ax2.set_title("Final Cumulative Reward per Degree (mean ±1σ)")
 ax2.grid(axis="y", linestyle="--", alpha=0.3); ax2.legend()
-plt.tight_layout(); plt.savefig("cumreward_darc_vs_sac_bar.pdf"); plt.show()
+plt.tight_layout(); plt.savefig("plots/cumreward_darc_vs_sac_bar.pdf"); plt.show()
 
 # ------------------------------------------------------------------ #
 # 6) STATISTICAL TESTS  (paired by seed)                             #

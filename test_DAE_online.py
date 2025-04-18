@@ -27,8 +27,8 @@ class DenoisingDataset(torch.utils.data.Dataset):
         x_clean = x_clean.astype(np.float32)
         x_noisy = x_noisy.astype(np.float32)
         # Here we assume each episode has a fixed length of 25 timesteps.
-        assert x_clean.shape[0] == 25, f"Episode length expected 25, got {x_clean.shape[0]}"
-        assert x_noisy.shape[0] == 25, f"Episode length expected 25, got {x_noisy.shape[0]}"
+        assert x_clean.shape[0] == 24, f"Episode length expected 24, got {x_clean.shape[0]}"
+        assert x_noisy.shape[0] == 24, f"Episode length expected 24, got {x_noisy.shape[0]}"
         return torch.tensor(x_noisy), torch.tensor(x_clean)
 
 # -------------------------------------
@@ -66,7 +66,7 @@ class OnlineDenoisingAutoencoder(nn.Module):
 # -------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(device)
-denoiser.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", map_location=device))
+denoiser.load_state_dict(torch.load("Denoising_AE/best_online_denoising_autoencoder.pth", map_location=device))
 denoiser.eval()
 
 # -------------------------------------

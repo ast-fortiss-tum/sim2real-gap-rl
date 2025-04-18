@@ -26,7 +26,7 @@ class ContSAC:
                  noise_scale=0.0, bias=0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, 
                  gamma=0.99, tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, 
                  n_games_til_train=1, n_updates_per_train=1, max_steps=200, seed=None,
-                 noise_indices=None, use_denoiser=1):
+                 noise_indices=None, use_denoiser=1, denoiser_dict=None):
         # Set the global seed if provided for reproducibility.
         if seed is not None:
             set_global_seed(seed)
@@ -80,10 +80,13 @@ class ContSAC:
         # Option to use a denoiser.
         self.use_denoiser = use_denoiser
         if self.use_denoiser:
+            d_noise = denoiser_dict["noise"]
+            d_bias = denoiser_dict["bias"]
+            d_degree = denoiser_dict["degree"]
             # Assume the denoiser was trained with input_dim=1.
             from online_denoising_AE import OnlineDenoisingAutoencoder
             self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
-            self.denoiser.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", 
+            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_denoising_autoencoder_Gaussian_Noise_{d_noise}_Bias_{d_bias}_Degree_{d_degree}.pth", 
                                                      map_location=self.device, weights_only=True))
             self.denoiser.eval()
 

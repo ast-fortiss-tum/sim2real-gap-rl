@@ -155,7 +155,7 @@ def construct_save_model_path(args, prefix="DARC"):
     return os.path.join(args.save_model, filename)
 
 def construct_log_dir(args, prefix="DARC"):
-    base_log_dir = "runs5"  # Change if needed !!
+    base_log_dir = "runs_Total"  # Change if needed !!
     #os.makedirs(base_log_dir, exist_ok=True)
     fs = args.fixed_start
     if args.fixed_start is not None:
@@ -191,9 +191,10 @@ def construct_log_dir(args, prefix="DARC"):
 
 def main():
     args = parse_args()
+    denoiser_dict = {"degree": args.degree, "seed": args.seed, "noise": args.noise, "bias": args.bias}
     # Build paths for DARC/DARC_two with "DARC" prefix.
-    save_model_path = construct_save_model_path(args, prefix="DARC")
-    log_dir = construct_log_dir(args, prefix="DARC")
+    save_model_path = construct_save_model_path(args, prefix="DARC_ON")
+    log_dir = construct_log_dir(args, prefix="DARC_ON")
     print("Saving DARC model to:", save_model_path)
     print("TensorBoard logs for DARC will be saved in:", log_dir)
 
@@ -304,9 +305,10 @@ def main():
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
-            if_normalize=False, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
+            if_normalize=True, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
             noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, noise_cfrs=args.noise_cfrs
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, denoiser_dict = denoiser_dict,
+            noise_cfrs=args.noise_cfrs, use_darc=True
         )
     else:
         model = DARC_two(
@@ -315,9 +317,46 @@ def main():
             n_updates_per_train=args.update, lr=args.lr,
             max_steps=args.max_steps, batch_size=args.bs,
             running_mean=running_state,
-            if_normalize=False, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
+            if_normalize=True, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
             noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
-            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, noise_cfrs=args.noise_cfrs
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, denoiser_dict = denoiser_dict,
+            noise_cfrs=args.noise_cfrs, use_darc=True
+        )
+
+    model.train(args.train_steps, deterministic=False)
+    model.save_model(save_model_path)
+
+    # -------------------------------------------------------------------------
+    # Build paths for DARC/DARC_two with "DARC" prefix.
+    save_model_path = construct_save_model_path(args, prefix="DARC_OFF")
+    log_dir = construct_log_dir(args, prefix="DARC_OFF")
+    print("Saving DARC_OFF model to:", save_model_path)
+    print("TensorBoard logs for DARC_OFF will be saved in:", log_dir)
+
+    # Instantiate DARC (or DARC_two) using the constructed paths.
+    if args.broken == 0:
+        model = DARC_one(
+            policy_config, value_config, sa_config, sas_config,
+            source_env, target_env, "cpu", ent_adj=True,
+            n_updates_per_train=args.update, lr=args.lr,
+            max_steps=args.max_steps, batch_size=args.bs,
+            running_mean=running_state,
+            if_normalize=True, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
+            noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, denoiser_dict = denoiser_dict,
+            noise_cfrs=args.noise_cfrs, use_darc=False
+        )
+    else:
+        model = DARC_two(
+            policy_config, value_config, sa_config, sas_config,
+            source_env, target_env, "cpu", ent_adj=True,
+            n_updates_per_train=args.update, lr=args.lr,
+            max_steps=args.max_steps, batch_size=args.bs,
+            running_mean=running_state,
+            if_normalize=True, delta_r_scale=args.deltar, s_t_ratio=args.s_t_ratio,
+            noise_scale=args.noise, bias=args.bias, warmup_games=args.warmup,
+            log_dir=log_dir, seed=args.seed, use_denoiser=args.use_denoiser, denoiser_dict = denoiser_dict,
+            noise_cfrs=args.noise_cfrs, use_darc=False
         )
 
     model.train(args.train_steps, deterministic=False)
@@ -342,18 +381,12 @@ def main():
         policy_config, value_config, target_env, 
         "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise, bias=args.bias,
         warmup_games=args.warmup, batch_size=args.bs, lr=args.lr, 
-        ent_adj=False, n_updates_per_train=args.update, max_steps=args.max_steps,
-        seed=args.seed, noise_indices=noise_indices, use_denoiser=args.use_denoiser
+        ent_adj=True, n_updates_per_train=args.update, max_steps=args.max_steps,
+        seed=args.seed, noise_indices=noise_indices, use_denoiser=args.use_denoiser, denoiser_dict=denoiser_dict,
     )
 
     model_vanilla.train(train_steps_SAC, deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
-
-    ############ NO NECESSARY ####################
-    # mpc_save_model_path = construct_save_model_path(args, prefix="MPC")
-    # mpc = MPC(target_env_mpc, save_dir=mpc_save_model_path, seed=args.seed)
-    # mpc.train()
-    # Save is automatic with run in mpc
 
 if __name__ == '__main__':
     main()

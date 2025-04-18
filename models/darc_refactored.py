@@ -20,7 +20,7 @@ class BaseDARC(ContSAC):
                  batch_size=64, lr=0.0001, gamma=0.99, tau=0.003, alpha=0.2, ent_adj=False,
                  delta_r_scale=1.0, s_t_ratio=10, noise_scale=1.0, bias=0.5, target_update_interval=1,
                  n_games_til_train=1, n_updates_per_train=1, decay_rate=0.99, max_steps=200,
-                 if_normalize=True, print_on=False, seed=42, use_denoiser=1, noise_cfrs=0.2):
+                 if_normalize=True, print_on=False, seed=42, use_denoiser=1, denoiser_dict = None,noise_cfrs=0.2, use_darc=True):
         # Set a fixed random seed if provided.
         if seed is not None:
             set_global_seed(seed)
@@ -32,6 +32,7 @@ class BaseDARC(ContSAC):
                                        n_games_til_train, n_updates_per_train, max_steps,noise_indices=None, use_denoiser=use_denoiser)
 
         # Save common hyperparameters
+        self.use_darc = use_darc
         self.delta_r_scale = delta_r_scale
         self.s_t_ratio = s_t_ratio
 
@@ -61,8 +62,11 @@ class BaseDARC(ContSAC):
         self.use_denoiser = use_denoiser
 
         if self.use_denoiser:
+            d_noise = denoiser_dict["noise"]
+            d_bias = denoiser_dict["bias"]
+            d_degree = denoiser_dict["degree"]
             self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
-            self.denoiser.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", map_location=self.device, weights_only=True))
+            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_denoising_autoencoder_Gaussian_Noise_{d_noise}_Bias_{d_bias}_Degree_{d_degree}.pth", map_location=self.device, weights_only=True))
             print("Denoiser loaded successfully.")
             self.denoiser.eval()
         else:
@@ -117,7 +121,7 @@ class BaseDARC(ContSAC):
                         train_info = self.train_step(s_s, s_a, s_r, s_s_, s_d, t_s, t_a, t_r, t_s_, t_d, i)
                         self.writer.add_train_step_info(train_info, i)
                     self.writer.write_train_step()
-                if i % 100 == 0:
+                if i % 50 == 0:
                     print('src', self.eval_src(10))
                     print('tgt', self.eval_tgt(10))
             print("SOURCE: index: {}, steps: {}, total_rewards: {}".format(i, source_step, source_reward))
@@ -249,7 +253,10 @@ class DARC_one(BaseDARC):
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
             sas_log_probs = torch.log(torch.softmax(sas_logits, dim=1) + 1e-12)
             
-            delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
+            if self.use_darc:
+                delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
+            else:
+                delta_r = 0
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         
@@ -444,7 +451,10 @@ class DARC_two(BaseDARC):
             sa_log_probs = torch.log(torch.softmax(sa_logits, dim=1) + 1e-12)
             sas_log_probs = torch.log(torch.softmax(sas_logits, dim=1) + 1e-12)
             
-            delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
+            if self.use_darc:
+                delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
+            else:
+                delta_r = 0
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         

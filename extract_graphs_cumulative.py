@@ -132,7 +132,7 @@ fig.legend(handles, labels, title="Run", loc='lower center',
 plt.tight_layout(rect=[0.05, 0.1, 0.95, 0.85])
 plt.subplots_adjust(wspace=0.3, hspace=0.8, bottom=0.4)
 
-#plt.savefig("cumulative_reward_skip2.pdf")
+#plt.savefig("plots/cumulative_reward_skip2.pdf")
 print(labels[2], "->", handles[2].get_ydata()[-1])
 print(labels[3], "->", handles[3].get_ydata()[-1])
 #plt.show()

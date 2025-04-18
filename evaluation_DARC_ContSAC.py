@@ -202,7 +202,7 @@ def main():
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("reward_vs_timestep.png")
+    plt.savefig("plots/reward_vs_timestep.png")
     plt.show()
 
 if __name__ == '__main__':

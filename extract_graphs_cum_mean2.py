@@ -109,7 +109,7 @@ ax.grid(True, axis="y")
 fig.legend(*ax.get_legend_handles_labels(), ncol=2,
            bbox_to_anchor=(0.5, 1.02), loc="upper center")
 fig.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("cumreward_median_IQR.pdf")
+plt.savefig("plots/cumreward_median_IQR.pdf")
 plt.show()
 
 # ─────────────────── figure 2: box‑plot final ─────────────────────
@@ -167,5 +167,5 @@ legend_handles = [
 ax2.legend(handles=legend_handles, loc="upper left", frameon=False, fontsize=6)
 
 fig2.tight_layout()
-plt.savefig("final_reward_boxplot.pdf")
+plt.savefig("plots/final_reward_boxplot.pdf")
 plt.show()

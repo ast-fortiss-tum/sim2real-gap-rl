@@ -53,6 +53,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Collect paired clean and noisy datasets.")
     parser.add_argument("--noise", type=float, default=0.2, help="Standard deviation of Gaussian noise")
     parser.add_argument("--bias", type=float, default=0.5, help="Bias added to observation")
+    parser.add_argument("--degree", type=float, default=0.65, help="Degree of the environment")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for environment")
     args = parser.parse_args()
 
     class NoisyWrapper(gym.ObservationWrapper):
@@ -65,20 +67,27 @@ if __name__ == "__main__":
             return obs + np.random.normal(0, self.noise_std, size=obs.shape) + self.bias
 
     # Create environments
-    env_clean = get_new_all_eff_env(degree=0.65, seed=42, rl=True).env
-    env_noisy = NoisyWrapper(env_clean, noise_std=args.noise, bias=args.bias)
+    DEGREE = args.degree
+    SEED = args.seed
+    NOISE = args.noise
+    BIAS = args.bias
+
+    env_clean = get_new_all_eff_env(degree=DEGREE, seed=SEED, rl=True).env
+    env_noisy = NoisyWrapper(env_clean, noise_std=NOISE, bias=BIAS)
 
     num_episodes = 365
-    max_steps = 24
+    max_steps = 23
 
     dataset = collect_dataset(env_clean, env_noisy, num_episodes, max_steps)
 
     clean_dataset = [episode_clean for (episode_clean, _) in dataset]
     noisy_dataset = [episode_noisy for (_, episode_noisy) in dataset]
 
-    np.save('clean_dataset2.npy', clean_dataset)
-    np.save('noisy_dataset2.npy', noisy_dataset)
-    print("Datasets saved successfully as 'clean_dataset.npy' and 'noisy_dataset.npy'.")
+    base = "manual_control_dataset/"
+
+    np.save(base + f'clean/clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', clean_dataset)
+    np.save(base + f'noisy/noisy_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', noisy_dataset)
+    print("Datasets saved successfully as 'clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy' and 'noisy_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy'.")
 
 # ---------------------------------------------------
 # PART 3: OPTIONAL PLOTTING OF THE OUTPUTS

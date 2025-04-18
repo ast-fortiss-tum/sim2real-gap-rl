@@ -127,7 +127,7 @@ fig.tight_layout(rect=[0,0,1,0.93])
 handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc="center right",
            bbox_to_anchor=(1.02, 0.5), borderaxespad=0.)
-plt.savefig("cumreward_denoiser_lines.pdf", bbox_inches="tight")
+plt.savefig("plots/cumreward_denoiser_lines.pdf", bbox_inches="tight")
 plt.show()
 
 # ------------- BAR CHART: final totals -------------
@@ -164,7 +164,7 @@ ax2.set_title("Final Cumulative Reward per Degree\n(mean ± 1σ across seeds)"
 ax2.grid(axis="y", linestyle="--", alpha=0.3)
 ax2.legend()
 plt.tight_layout()
-plt.savefig("cumreward_denoiser_bar.pdf")
+plt.savefig("plots/cumreward_denoiser_bar.pdf")
 plt.show()
 
 

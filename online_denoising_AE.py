@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch.nn.functional as F
+import argparse
 
 # ------------------------------
 # 1. Create a PyTorch Dataset to Load the Saved Data
@@ -102,8 +103,18 @@ class OnlineDenoisingAutoencoder(nn.Module):
 # ------------------------------
 
 def main():
-    dataset_path_clean = 'clean_dataset.npy'
-    dataset_path_noisy = 'noisy_dataset.npy'
+
+    parser = argparse.ArgumentParser(description="Collect paired clean and noisy datasets.")
+    parser.add_argument("--noise", type=float, default=0.2, help="Standard deviation of Gaussian noise")
+    parser.add_argument("--bias", type=float, default=0.5, help="Bias added to observation")
+    parser.add_argument("--degree", type=float, default=0.65, help="Degree of the environment")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for environment")
+    args = parser.parse_args()
+
+    base = "manual_control_dataset/"
+
+    dataset_path_clean = base + f'clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy'
+    dataset_path_noisy = base + f'clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy'
 
     full_dataset = DenoisingDataset(dataset_path_clean, dataset_path_noisy)
     total_samples = len(full_dataset)
@@ -170,12 +181,14 @@ def main():
         
         # Update the LR scheduler with the validation loss.
         scheduler.step(avg_val_loss)
+
+        name = f"Denoising_AE/best_online_denoising_autoencoder_Gaussian_Noise_{args.noise}_Bias_{args.bias}_Degree_{args.degree}.pth"
         
         # --- Early Stopping Check ---
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_no_improve = 0
-            torch.save(model.state_dict(), "best_online_denoising_autoencoder2.pth")
+            torch.save(model.state_dict(), name)
             print("  Validation loss improved. Model saved.")
         else:
             epochs_no_improve += 1
@@ -188,7 +201,7 @@ def main():
     print("Online training complete.")
 
     # Load the best model (optional)
-    model.load_state_dict(torch.load("best_online_denoising_autoencoder.pth", map_location=device))
+    model.load_state_dict(torch.load(name, map_location=device))
     print("Best online model loaded.")
 
     # ------------------------------
