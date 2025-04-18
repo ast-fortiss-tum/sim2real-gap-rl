@@ -65,7 +65,7 @@ if __name__ == "__main__":
             return obs + np.random.normal(0, self.noise_std, size=obs.shape) + self.bias
 
     # Create environments
-    env_clean = get_new_all_eff_env(degree=1.0, seed=42, rl=True).env
+    env_clean = get_new_all_eff_env(degree=0.65, seed=42, rl=True).env
     env_noisy = NoisyWrapper(env_clean, noise_std=args.noise, bias=args.bias)
 
     num_episodes = 365
@@ -76,8 +76,8 @@ if __name__ == "__main__":
     clean_dataset = [episode_clean for (episode_clean, _) in dataset]
     noisy_dataset = [episode_noisy for (_, episode_noisy) in dataset]
 
-    np.save('clean_dataset.npy', clean_dataset)
-    np.save('noisy_dataset.npy', noisy_dataset)
+    np.save('clean_dataset2.npy', clean_dataset)
+    np.save('noisy_dataset2.npy', noisy_dataset)
     print("Datasets saved successfully as 'clean_dataset.npy' and 'noisy_dataset.npy'.")
 
 # ---------------------------------------------------
