@@ -26,11 +26,12 @@ class ContSAC:
                  noise_scale=0.0, bias=0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, 
                  gamma=0.99, tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, 
                  n_games_til_train=1, n_updates_per_train=1, max_steps=200, seed=None,
-                 noise_indices=None, use_denoiser=1, denoiser_dict=None):
+                 noise_indices=None, use_denoiser=1, denoiser_dict=None, stage_tag = "Target"):
         # Set the global seed if provided for reproducibility.
         if seed is not None:
             set_global_seed(seed)
         
+        self.stage_tag = stage_tag
         self.device = device
         self.gamma = gamma
         self.batch_size = batch_size
@@ -243,8 +244,8 @@ class ContSAC:
                     break
 
             if i >= self.warmup_games:
-                self.writer.add_scalar('Env/Rewards', total_reward, i)
-                self.writer.add_scalar('Env/N_Steps', n_steps, i)
+                self.writer.add_scalar(f'{self.stage_tag}/Env/Rewards', total_reward, i)
+                self.writer.add_scalar(f'{self.stage_tag}/Env/N_Steps', n_steps, i)
                 if i % self.n_games_til_train == 0:
                     for _ in range(n_steps * self.n_updates_per_train):
                         self.total_train_steps += 1

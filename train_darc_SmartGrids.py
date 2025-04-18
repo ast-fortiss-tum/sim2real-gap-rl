@@ -367,6 +367,37 @@ def main():
     # The vanilla model will use a log_dir and save path that include "ContSAC" in their names.
     # -------------------------------------------------------------------------
 
+    vanilla_save_model_path = construct_save_model_path(args, prefix="ContSAC_FT")
+    vanilla_log_dir = construct_log_dir(args, prefix="ContSAC_FT")
+
+    print("Saving Vanilla SAC_FT model to:", vanilla_save_model_path)
+    print("TensorBoard logs for vanilla SAC_FT will be saved in:", vanilla_log_dir)
+
+    noise_indices = [100, 226] if args.broken == 1 else [100]
+
+    train_steps_SAC_Source = args.train_steps
+    train_steps_SAC_Target = int(args.train_steps / args.s_t_ratio)
+
+    model_vanilla = ContSAC(
+        policy_config, value_config, source_env, 
+        "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise, bias=args.bias,
+        warmup_games=args.warmup, batch_size=args.bs, lr=args.lr, 
+        ent_adj=True, n_updates_per_train=args.update, max_steps=args.max_steps,
+        seed=args.seed, noise_indices=noise_indices, use_denoiser=args.use_denoiser, denoiser_dict=denoiser_dict,
+        stage_tag="Source"
+    )
+
+    model_vanilla.train(train_steps_SAC_Source, deterministic=False)
+    #model_vanilla.save_model(vanilla_save_model_path)
+    model_vanilla.env = target_env
+    model_vanilla.stage_tag = "Target"
+    model_vanilla.train(train_steps_SAC_Target, deterministic=False)
+    model_vanilla.save_model(vanilla_save_model_path)
+    # -------------------------------------------------------------------------
+    # Also train a vanilla ContSAC model with the same arguments but with its own paths.
+    # The vanilla model will use a log_dir and save path that include "ContSAC" in their names.
+    # -------------------------------------------------------------------------
+
     vanilla_save_model_path = construct_save_model_path(args, prefix="ContSAC")
     vanilla_log_dir = construct_log_dir(args, prefix="ContSAC")
 

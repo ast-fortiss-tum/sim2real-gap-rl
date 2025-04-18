@@ -18,9 +18,8 @@ BS=12
 UPDATE=1
 DELTAR=1
 ENV_NAME="Smart_Grids"
-SAVE_MODEL="./saved_models_experiments_5/"
-SAVE_FILE_NAME="test_run_NOISE_SET(1)" 
-SEED=20  # Seed value included
+SAVE_MODEL="./saved_models_experiments_Total/"
+SAVE_FILE_NAME="test_run_NOISE_SET(1)_Total_" 
 #FIXED_START="27.11.2016"   # Fixed start date
 #FIXED_START=None
 
@@ -37,28 +36,30 @@ for lin_src in 1; do
       for noise in 0.2; do
         for bias in 0.5; do
           for noise_cfrs in 0.0; do
-            for use_denoiser in 0 1; do
-              echo "-----------------------------------------------------"
-              echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"
-              python3 train_darc_SmartGrids.py \
-                --save_file_name ${SAVE_FILE_NAME} \
-                --env-name ${ENV_NAME} \
-                --broken 0 \
-                --lin_src ${lin_src} \
-                --variety-name ${variety} \
-                --degree ${degree} \
-                --noise ${noise} \
-                --lr ${LR} \
-                --train-steps ${TRAIN_STEPS} \
-                --max-steps ${MAX_STEPS} \
-                --bs ${BS} \
-                --update ${UPDATE} \
-                --deltar ${DELTAR} \
-                --save-model ${SAVE_MODEL} \
-                --seed ${SEED} \
-                --bias ${bias} \
-                --noise_cfrs ${noise_cfrs} \
-                --use_denoiser ${use_denoiser}
+            for use_denoiser in 0; do
+              for seed in 10 20; do
+                echo "-----------------------------------------------------"
+                echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"
+                python3 train_darc_SmartGrids.py \
+                  --save_file_name ${SAVE_FILE_NAME} \
+                  --env-name ${ENV_NAME} \
+                  --broken 0 \
+                  --lin_src ${lin_src} \
+                  --variety-name ${variety} \
+                  --degree ${degree} \
+                  --noise ${noise} \
+                  --lr ${LR} \
+                  --train-steps ${TRAIN_STEPS} \
+                  --max-steps ${MAX_STEPS} \
+                  --bs ${BS} \
+                  --update ${UPDATE} \
+                  --deltar ${DELTAR} \
+                  --save-model ${SAVE_MODEL} \
+                  --seed ${seed} \
+                  --bias ${bias} \
+                  --noise_cfrs ${noise_cfrs} \
+                  --use_denoiser ${use_denoiser}
+              done
             done
           done
         done
