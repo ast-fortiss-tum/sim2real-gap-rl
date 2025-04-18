@@ -47,6 +47,13 @@ class ReplayBuffer:
                 np.array(next_states), 
                 np.array(dones))
     
+    def clear(self):
+        """
+        Clears the buffer, removing all stored experiences.
+        """
+        self.buffer = []
+        print("Replay buffer cleared.")
+
     def __len__(self):
         """
         Returns the current number of experiences stored in the buffer.

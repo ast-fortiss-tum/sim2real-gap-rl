@@ -11,7 +11,7 @@
 #Noise set (3): noise on "damaged" (eff:0.5) or perfect linear environment (obs. and (dyn.) shift) Another random distribution
 
 # Common parameters
-TRAIN_STEPS=25   # Number of training steps
+TRAIN_STEPS=201   # Number of training steps
 LR=0.0008
 MAX_STEPS=24
 BS=12

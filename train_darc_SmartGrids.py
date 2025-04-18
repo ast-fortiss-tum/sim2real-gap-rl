@@ -127,7 +127,7 @@ def construct_save_model_path(args, prefix="DARC"):
     if args.fixed_start is not None:
         fs = args.fixed_start.replace('.', '-')
     # Build a filename solely from the hyperparameters.
-    filename = f"{prefix}_{args.save_file_name}_fs{fs}_lr{args.lr}_noise{args.noise}_bias{args.bias}_seed{args.seed}_noise_cfrs_{args.noise_cfrs}_use_denoiser_{args.use_denoiser}_"
+    filename = f"{prefix}_{args.save_file_name}_fs_{fs}_lr_{args.lr}_noise_{args.noise}_bias_{args.bias}_seed_{args.seed}_noise_cfrs_{args.noise_cfrs}_use_denoiser_{args.use_denoiser}_"
     if args.broken == 0:
         # One-house experiments: include linear source flag and variety.
         filename += f"lin_src{args.lin_src}_variety{args.variety_name}_"
@@ -388,9 +388,11 @@ def main():
     )
 
     model_vanilla.train(train_steps_SAC_Source, deterministic=False)
-    #model_vanilla.save_model(vanilla_save_model_path)
+
     model_vanilla.env = target_env
     model_vanilla.stage_tag = "Target"
+
+    #model_vanilla.memory.clear()
     model_vanilla.train(train_steps_SAC_Target, deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
     # -------------------------------------------------------------------------

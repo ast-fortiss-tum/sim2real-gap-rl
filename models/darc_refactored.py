@@ -256,7 +256,7 @@ class DARC_one(BaseDARC):
             if self.use_darc:
                 delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
             else:
-                delta_r = 0
+                delta_r = torch.zeros_like(sas_log_probs[:, 1])
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         
@@ -454,7 +454,7 @@ class DARC_two(BaseDARC):
             if self.use_darc:
                 delta_r = sas_log_probs[:, 1] - sas_log_probs[:, 0] - sa_log_probs[:, 1] + sa_log_probs[:, 0]
             else:
-                delta_r = 0
+                delta_r = torch.zeros_like(sas_log_probs[:, 1])
             if game_count >= 2 * self.warmup_games:
                 s_rewards = s_rewards + self.delta_r_scale * delta_r.unsqueeze(1)
         
