@@ -7,7 +7,7 @@ import pickle
 
 from architectures.utils import Model, gen_noise
 from replay_buffer import ReplayBuffer
-from models.sac_refactored import ContSAC, set_global_seed
+from models.sac_refractored2 import ContSAC, set_global_seed
 
 from online_denoising_AE import OnlineDenoisingAutoencoder, DenoisingDataset
 
@@ -121,7 +121,8 @@ class BaseDARC(ContSAC):
                         train_info = self.train_step(s_s, s_a, s_r, s_s_, s_d, t_s, t_a, t_r, t_s_, t_d, i)
                         self.writer.add_train_step_info(train_info, i)
                     self.writer.write_train_step()
-                if i % 50 == 0:
+                #if i % 50 == 0:
+                if False:
                     print('src', self.eval_src(10))
                     print('tgt', self.eval_tgt(10))
             print("SOURCE: index: {}, steps: {}, total_rewards: {}".format(i, source_step, source_reward))

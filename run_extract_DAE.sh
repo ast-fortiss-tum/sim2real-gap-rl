@@ -21,7 +21,7 @@ echo "Starting experiments for Smart Grids..."
 #########################################
 
 # (i) Degree-based experiments: for varieties that use a degree (e.g., s, c, d, v)
-for bias in 0.2; do
+for bias in 0.5; do
   for noise in 0.2; do
     for degree in 0.5 0.65 0.8; do
       echo "-----------------------------------------------------"

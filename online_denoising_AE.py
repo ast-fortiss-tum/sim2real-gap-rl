@@ -14,6 +14,8 @@ class DenoisingDataset(Dataset):
         # Load the datasets saved as .npy files (lists of episodes)
         self.clean_data = np.load(clean_file, allow_pickle=True)
         self.noisy_data = np.load(noisy_file, allow_pickle=True)
+        print(self.clean_data.shape, self.noisy_data.shape)
+
         self.n = len(self.clean_data)
         
     def __len__(self):
@@ -33,8 +35,8 @@ class DenoisingDataset(Dataset):
         x_noisy = x_noisy.astype(np.float32)
         # Here we assume each episode must have a fixed length.
         # (Adjust the expected length if needed; here it is set to 25.)
-        assert x_clean.shape[0] == 25, f"Expected episode length 25, got {x_clean.shape[0]}"
-        assert x_noisy.shape[0] == 25, f"Expected episode length 25, got {x_noisy.shape[0]}"
+        assert x_clean.shape[0] == 24, f"Expected episode length 25, got {x_clean.shape[0]}"
+        assert x_noisy.shape[0] == 24, f"Expected episode length 25, got {x_noisy.shape[0]}"
         # Return as torch tensors
         return torch.tensor(x_noisy), torch.tensor(x_clean)
 
@@ -114,7 +116,7 @@ def main():
     base = "manual_control_dataset/"
 
     dataset_path_clean = base + f'clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy'
-    dataset_path_noisy = base + f'clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy'
+    dataset_path_noisy = base + f'noisy/noisy_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy'
 
     full_dataset = DenoisingDataset(dataset_path_clean, dataset_path_noisy)
     total_samples = len(full_dataset)
@@ -127,7 +129,7 @@ def main():
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     print(f"Total samples: {total_samples}, Training: {train_size}, Validation: {val_size}")
 
-    batch_size = 25  # Adjust batch size as needed
+    batch_size = 24  # Adjust batch size as needed
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -139,8 +141,8 @@ def main():
     model = model.to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
     num_epochs = 1000   # Maximum epochs
     patience = 20       # Early stopping patience
@@ -177,7 +179,7 @@ def main():
                 val_loss += loss.item()
         avg_val_loss = val_loss / len(val_loader)
         
-        print(f"Epoch [{epoch+1}/{num_epochs}]  Train Loss: {avg_train_loss:.4f}  Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch [{epoch+1}/{num_epochs}]  Train Loss: {avg_train_loss:.5f}  Val Loss: {avg_val_loss:.5f}")
         
         # Update the LR scheduler with the validation loss.
         scheduler.step(avg_val_loss)

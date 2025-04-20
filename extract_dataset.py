@@ -83,6 +83,9 @@ if __name__ == "__main__":
     clean_dataset = [episode_clean for (episode_clean, _) in dataset]
     noisy_dataset = [episode_noisy for (_, episode_noisy) in dataset]
 
+    print("Clean dataset: ", clean_dataset)
+    print("Noisy dataset: ", noisy_dataset)
+
     base = "manual_control_dataset/"
 
     np.save(base + f'clean/clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', clean_dataset)
@@ -92,7 +95,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------
 # PART 3: OPTIONAL PLOTTING OF THE OUTPUTS
 # ---------------------------------------------------
-if False:
+if True:
     for i, (episode_clean, episode_noisy) in enumerate(dataset):
         plt.figure(figsize=(8, 4))
         plt.plot(episode_clean[:], '-o', label='Clean')

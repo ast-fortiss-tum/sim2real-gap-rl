@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 #from models.sac import ContSAC
 #from models.darc_denoise import DARC, DARC_two
 from models.darc_refactored import DARC_one, DARC_two
-from models.sac_refactored import ContSAC
+from models.sac_refractored2 import ContSAC
 from models.mpc import MPC
 from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 
@@ -47,7 +47,7 @@ def parse_args():
                         help='Number of updates per training iteration')
     parser.add_argument('--deltar', type=float, default=1,
                         help='Delta r scale')
-    parser.add_argument('--warmup', type=int, default=2,
+    parser.add_argument('--warmup', type=int, default=0,
                         help='Number of warmup steps')
 
     # Environment settings (only Smart Grid supported)
@@ -392,6 +392,8 @@ def main():
     model_vanilla.env = target_env
     model_vanilla.stage_tag = "Target"
 
+    model_vanilla.count_ep = 0
+
     #model_vanilla.memory.clear()
     model_vanilla.train(train_steps_SAC_Target, deterministic=False)
     model_vanilla.save_model(vanilla_save_model_path)
@@ -399,6 +401,47 @@ def main():
     # Also train a vanilla ContSAC model with the same arguments but with its own paths.
     # The vanilla model will use a log_dir and save path that include "ContSAC" in their names.
     # -------------------------------------------------------------------------
+    # ── interleaved fine‑tuning: 10 source episodes, then 1 target, until done ──
+    vanilla_save_model_path = construct_save_model_path(args, prefix="ContSAC_STR")
+    vanilla_log_dir = construct_log_dir(args, prefix="ContSAC_STR")
+
+    print("Saving Vanilla SAC_FT model to:", vanilla_save_model_path)
+    print("TensorBoard logs for vanilla SAC_FT will be saved in:", vanilla_log_dir)
+
+    noise_indices = [100, 226] if args.broken == 1 else [100]
+    model_vanilla = ContSAC(
+        policy_config, value_config, source_env, 
+        "cpu", log_dir=vanilla_log_dir, running_mean=running_state, noise_scale=args.noise, bias=args.bias,
+        warmup_games=args.warmup, batch_size=args.bs, lr=args.lr, 
+        ent_adj=True, n_updates_per_train=args.update, max_steps=args.max_steps,
+        seed=args.seed, noise_indices=noise_indices, use_denoiser=args.use_denoiser, denoiser_dict=denoiser_dict,
+        stage_tag="Source"
+    )
+    total_src = train_steps_SAC_Source
+    total_tgt = train_steps_SAC_Target
+    src_done = tgt_done = 0
+
+    while src_done < total_src or tgt_done < total_tgt:
+        # ▶︎ train up to s_t_ratio source episodes
+        n_src = min(args.s_t_ratio, total_src - src_done)
+
+        # ▶︎ train exactly 1 target episode
+        if tgt_done < total_tgt:
+            model_vanilla.env       = target_env
+            model_vanilla.stage_tag = "Target"
+            model_vanilla.train(1, deterministic=False)
+            tgt_done += 1
+        if n_src > 0:
+            model_vanilla.env       = source_env
+            model_vanilla.stage_tag = "Source"
+            model_vanilla.train(n_src, deterministic=False)
+            src_done += n_src
+
+
+    # finally save
+    model_vanilla.save_model(vanilla_save_model_path)
+
+    # ------------------------------------------------------------------------
 
     vanilla_save_model_path = construct_save_model_path(args, prefix="ContSAC")
     vanilla_log_dir = construct_log_dir(args, prefix="ContSAC")
