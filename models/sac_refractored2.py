@@ -90,7 +90,7 @@ class ContSAC:
             # Assume the denoiser was trained with input_dim=1.
             from online_denoising_AE import OnlineDenoisingAutoencoder
             self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
-            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_denoising_autoencoder_Gaussian_Noise_{d_noise}_Bias_{d_bias}_Degree_{d_degree}.pth", 
+            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_noise_{d_noise}_bias_{d_bias}_deg_{d_degree}.pth", 
                                                      map_location=self.device, weights_only=True))
             self.denoiser.eval()
 

@@ -36,8 +36,8 @@ for lin_src in 1; do
       for noise in 0.2; do
         for bias in 0.5; do
           for noise_cfrs in 0.0; do
-            for use_denoiser in 0; do   # Next one set this to 1 !!!!
-              for seed in 30 40 50; do
+            for use_denoiser in 1; do   # Next one set this to 1 !!!!
+              for seed in 10 20 30 40 50 60 70 80 90 100; do
                 echo "-----------------------------------------------------"
                 echo "Running one-house (degree): broken=0, lin_src=${lin_src}, variety=${variety}, degree=${degree}, noise=${noise}"
                 python3 train_darc_SmartGrids.py \

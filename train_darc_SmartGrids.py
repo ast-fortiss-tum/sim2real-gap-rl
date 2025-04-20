@@ -155,7 +155,7 @@ def construct_save_model_path(args, prefix="DARC"):
     return os.path.join(args.save_model, filename)
 
 def construct_log_dir(args, prefix="DARC"):
-    base_log_dir = "runs_Total"  # Change if needed !!
+    base_log_dir = "runs_Total_denoiser"  # Change if needed !!
     #os.makedirs(base_log_dir, exist_ok=True)
     fs = args.fixed_start
     if args.fixed_start is not None:

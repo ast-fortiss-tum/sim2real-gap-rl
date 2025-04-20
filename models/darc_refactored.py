@@ -29,7 +29,8 @@ class BaseDARC(ContSAC):
         super(BaseDARC, self).__init__(policy_config, value_config, source_env, device, log_dir,
                                        running_mean, noise_scale, bias, memory_size, warmup_games, batch_size,
                                        lr, gamma, tau, alpha, ent_adj, target_update_interval,
-                                       n_games_til_train, n_updates_per_train, max_steps,noise_indices=None, use_denoiser=use_denoiser)
+                                       n_games_til_train, n_updates_per_train, max_steps,noise_indices=None,
+                                       use_denoiser=use_denoiser, denoiser_dict=denoiser_dict)
 
         # Save common hyperparameters
         self.use_darc = use_darc
@@ -66,7 +67,8 @@ class BaseDARC(ContSAC):
             d_bias = denoiser_dict["bias"]
             d_degree = denoiser_dict["degree"]
             self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
-            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_denoising_autoencoder_Gaussian_Noise_{d_noise}_Bias_{d_bias}_Degree_{d_degree}.pth", map_location=self.device, weights_only=True))
+            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_noise_{d_noise}_bias_{d_bias}_deg_{d_degree}.pth",
+                                                      map_location=self.device, weights_only=True))
             print("Denoiser loaded successfully.")
             self.denoiser.eval()
         else:
