@@ -1,0 +1,96 @@
+% This file was created with tikzplotlib v0.10.1.
+\begin{tikzpicture}
+
+\definecolor{darkgray176}{RGB}{176,176,176}
+
+\begin{axis}[
+legend cell align={left},
+legend style={
+  fill opacity=0.8,
+  draw opacity=1,
+  text opacity=1,
+  at={(0.03,0.97)},
+  anchor=north west,
+  draw=none
+},
+tick align=outside,
+tick pos=left,
+x grid style={darkgray176},
+xlabel={degree},
+xmin=-0.485, xmax=2.485,
+xtick style={color=black},
+xtick={0,1,2},
+xticklabels={0.5,0.65,0.8},
+y grid style={darkgray176},
+ylabel={Final Cumulative Reward},
+ymajorgrids,
+ymin=-89.4194521218538, ymax=0,
+ytick style={color=black}
+]
+\draw[draw=black,fill=white,postaction={pattern=north east lines}] (axis cs:-0.35,0) rectangle (axis cs:0,-81.8051537275314);
+\addlegendimage{ybar,ybar legend,draw=black,fill=white,postaction={pattern=north east lines}}
+\addlegendentry{denoiser OFF}
+
+\draw[draw=black,fill=white,postaction={pattern=north east lines}] (axis cs:0.65,0) rectangle (axis cs:1,-60.3817566037178);
+\draw[draw=black,fill=white,postaction={pattern=north east lines}] (axis cs:1.65,0) rectangle (axis cs:2,-53.4022732973099);
+\draw[draw=black,fill=black] (axis cs:2.77555756156289e-17,0) rectangle (axis cs:0.35,-83.2392280101776);
+\addlegendimage{ybar,ybar legend,draw=black,fill=black}
+\addlegendentry{denoiser ON}
+
+\draw[draw=black,fill=black] (axis cs:1,0) rectangle (axis cs:1.35,-58.7634586691856);
+\draw[draw=black,fill=black] (axis cs:2,0) rectangle (axis cs:2.35,-54.0427439361811);
+\path [draw=black, semithick]
+(axis cs:-0.175,-84.6491248607635)
+--(axis cs:-0.175,-77.7425249218941);
+
+\path [draw=black, semithick]
+(axis cs:0.825,-64.7482869029045)
+--(axis cs:0.825,-55.231581568718);
+
+\path [draw=black, semithick]
+(axis cs:1.825,-65.4660192430019)
+--(axis cs:1.825,-50.4533345475793);
+
+\path [draw=black, semithick]
+(axis cs:0.175,-85.1613829731941)
+--(axis cs:0.175,-76.7767283916473);
+
+\path [draw=black, semithick]
+(axis cs:1.175,-60.3330432474613)
+--(axis cs:1.175,-53.2113874852657);
+
+\path [draw=black, semithick]
+(axis cs:2.175,-61.0479154139757)
+--(axis cs:2.175,-48.5626285821199);
+
+\addplot [semithick, black, mark=-, mark size=4, mark options={solid}, only marks]
+table {%
+-0.175 -84.6491248607635
+0.825 -64.7482869029045
+1.825 -65.4660192430019
+};
+\addlegendentry{denoiser ON}
+\addplot [semithick, black, mark=-, mark size=4, mark options={solid}, only marks]
+table {%
+-0.175 -77.7425249218941
+0.825 -55.231581568718
+1.825 -50.4533345475793
+};
+\addlegendentry{denoiser ON}
+\addplot [semithick, black, mark=-, mark size=4, mark options={solid}, only marks]
+table {%
+0.175 -85.1613829731941
+1.175 -60.3330432474613
+2.175 -61.0479154139757
+};
+\addlegendentry{denoiser ON}
+\addplot [semithick, black, mark=-, mark size=4, mark options={solid}, only marks]
+table {%
+0.175 -76.7767283916473
+1.175 -53.2113874852657
+2.175 -48.5626285821199
+};
+\addlegendentry{denoiser ON}
+\end{axis}
+
+\end{tikzpicture}

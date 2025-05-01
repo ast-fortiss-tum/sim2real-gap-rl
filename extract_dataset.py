@@ -72,8 +72,10 @@ if __name__ == "__main__":
     NOISE = args.noise
     BIAS = args.bias
 
-    env_clean = get_new_all_eff_env(degree=DEGREE, seed=SEED, rl=True).env
-    env_noisy = NoisyWrapper(env_clean, noise_std=NOISE, bias=BIAS)
+    #env_clean = get_new_all_eff_env(degree=DEGREE, seed=SEED, rl=True).env
+    env_clean = get_simple_linear_env(seed=SEED,fixed_start=None, rl=True).env
+    env_noisy = get_new_all_eff_env(degree=DEGREE, seed=SEED, fixed_start = None, rl=True).env
+    #env_noisy = NoisyWrapper(env_noisy, noise_std=NOISE, bias=BIAS)
 
     num_episodes = 365
     max_steps = 23
@@ -86,16 +88,16 @@ if __name__ == "__main__":
     print("Clean dataset: ", clean_dataset)
     print("Noisy dataset: ", noisy_dataset)
 
-    base = "manual_control_dataset/"
+    base = "shift_dataset/"
 
-    np.save(base + f'clean/clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', clean_dataset)
-    np.save(base + f'noisy/noisy_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', noisy_dataset)
+    np.save(base + f'clean_shift_only_dyn/clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', clean_dataset)
+    np.save(base + f'noisy_shift_only_dyn/noisy_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy', noisy_dataset)
     print("Datasets saved successfully as 'clean_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy' and 'noisy_dataset_degree_{DEGREE}_Gaussian_noise_{NOISE}_bias_{BIAS}.npy'.")
 
 # ---------------------------------------------------
 # PART 3: OPTIONAL PLOTTING OF THE OUTPUTS
 # ---------------------------------------------------
-if True:
+if False:
     for i, (episode_clean, episode_noisy) in enumerate(dataset):
         plt.figure(figsize=(8, 4))
         plt.plot(episode_clean[:], '-o', label='Clean')

@@ -10,10 +10,13 @@ import os, re, math, numpy as np, tensorflow as tf, matplotlib.pyplot as plt
 from collections import defaultdict
 from scipy.stats import wilcoxon, ttest_rel
 
+# ─── add once, near other imports ─────────────────────────────────
+import tikzplotlib as tpl
+
 # ───────────────────────── settings ───────────────────────────────
-folder_path   = "/home/cubos98/Desktop/MA/DARAIL/runs/runs6"
+folder_path   = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_DARC_denoiser_vs"
 tag           = "Target Env/Rewards"           # DARC reward tag
-drop_first_k  = 2                              # skip first k episodes
+drop_first_k  = 0                              # skip first k episodes
 base_regex    = re.compile(
     r'(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*DARC)',
     re.IGNORECASE,
@@ -92,7 +95,7 @@ degrees = sorted(stat.keys())
 colmap  = plt.cm.viridis(np.linspace(0, 1, len(degrees)))
 
 # ──────────────────────── figure 1: curves ────────────────────────
-fig, ax = plt.subplots(figsize=(6.2, 3.4))
+fig, ax = plt.subplots(figsize=(3, 3))
 for c, deg in zip(colmap, degrees):
     for den, ls in ((0, "--"), (1, "-")):
         if den not in stat[deg]:
@@ -104,18 +107,20 @@ for c, deg in zip(colmap, degrees):
         ax.fill_between(ep, q1, q3, color=c, alpha=0.25)
 ax.set_xlabel("Episode")
 ax.set_ylabel("Median Cumulative Reward")
-ax.set_title(f"Cumulative Reward (median ± IQR, skip first {drop_first_k})")
+#ax.set_title(f"Cumulative Reward (median ± IQR, skip first {drop_first_k})")
 ax.grid(True, axis="y")
 fig.legend(*ax.get_legend_handles_labels(), ncol=2,
            bbox_to_anchor=(0.5, 1.02), loc="upper center")
 fig.tight_layout(rect=[0, 0, 1, 0.95])
 plt.savefig("plots/cumreward_median_IQR.pdf")
+tpl.save("plots/cumreward_median_IQR.tex")
 plt.show()
 
 # ─────────────────── figure 2: box‑plot final ─────────────────────
 from matplotlib.patches import Patch
 
-fig2, ax2 = plt.subplots(figsize=(6.2, 2.8))
+#fig2, ax2 = plt.subplots(figsize=(6.2, 2.8))
+fig2, ax2 = plt.subplots(figsize=(3, 3))
 
 box_data, box_pos, box_props = [], [], []   # props: (facecolor, hatch)
 width = 0.35
@@ -127,7 +132,7 @@ for i, (deg, c) in enumerate(zip(degrees, colmap)):
         box_data.append(finals)             # plain Python list
         box_pos.append(i + (j-0.5)*width)
         face = c
-        hatch = "//" if den == 0 else ""    # hatched = OFF, solid = ON
+        hatch = "/" if den == 0 else "x"    # hatched = OFF, solid = ON
         box_props.append((face, hatch))
 
 # all boxes must have the same length → trim to min group size
@@ -156,16 +161,19 @@ ax2.set_xticks(range(len(degrees)))
 ax2.set_xticklabels([str(d) for d in degrees])
 ax2.set_xlabel("degree")
 ax2.set_ylabel("Final Cumulative Reward")
-ax2.set_title("Final Reward Distribution")
+#ax2.set_title("Final Reward Distribution")
 ax2.grid(axis="y", linestyle="--", alpha=0.3)
 
 # explicit legend handles
 legend_handles = [
-    Patch(facecolor="white", edgecolor="k", hatch="//", label="denoiser OFF"),
-    Patch(facecolor="white", edgecolor="k", hatch="",   label="denoiser ON")
+    Patch(facecolor="white", edgecolor="k", hatch="/", label="denoiser OFF"),
+    Patch(facecolor="white", edgecolor="k", hatch="x",   label="denoiser ON")
 ]
 ax2.legend(handles=legend_handles, loc="upper left", frameon=False, fontsize=6)
 
 fig2.tight_layout()
 plt.savefig("plots/final_reward_boxplot.pdf")
+tpl.save("plots/final_reward_boxplot.tex")
 plt.show()
+
+

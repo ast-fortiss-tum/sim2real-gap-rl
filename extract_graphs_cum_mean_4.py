@@ -25,6 +25,7 @@ folder_path   = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_Total"
 drop_first_k  = 0                             
 base_regex    = re.compile(
     r"(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)",
+    #r"(?=.*noise_cfrs_0\.0)",
     re.IGNORECASE,
 )
 algo_pat      = re.compile(rf"^({'|'.join(map(re.escape, algos))})", re.IGNORECASE)
@@ -116,7 +117,7 @@ algos_present = sorted(
 cmap = plt.cm.tab10(np.linspace(0, 1, len(algos_present)))
 
 # ───────────────────────── figure 1: curves ───────────────────────
-fig1, ax1 = plt.subplots(figsize=(6.2, 3.4))
+fig1, ax1 = plt.subplots(figsize=(3, 3))
 for color, algo in zip(cmap, algos_present):
     med, q1, q3, n = stat_algo[algo]
     ep = np.arange(1, len(med) + 1)
@@ -126,16 +127,16 @@ for color, algo in zip(cmap, algos_present):
 ax1.set_xlim(1, 20)
 ax1.set_xlabel("Episode")
 ax1.set_ylabel("Median Cumulative Reward")
-ax1.set_title("Cumulative Reward (median ± IQR)")
+#ax1.set_title("Cumulative Reward (median ± IQR)")
 ax1.grid(True, axis="y")
 fig1.legend(*ax1.get_legend_handles_labels(), fontsize=6,
-            loc="upper center", bbox_to_anchor=(0.2, 0.35))
+            loc="upper center", bbox_to_anchor=(0.3, 1.2))
 fig1.tight_layout()
-plt.savefig("plots/cumreward_median_IQR_by_algo.pdf", bbox_inches="tight")
+plt.savefig("plots_final/cumreward_median_IQR_by_algo.pdf", bbox_inches="tight")
 plt.show()
 
 # ───────────── figure 2: box‑plot final per algorithm ─────────────
-fig2, ax2 = plt.subplots(figsize=(6.2, 2.8))
+fig2, ax2 = plt.subplots(figsize=(3, 3))
 box_data = [[c[-1] for c in group_algo[a]] for a in algos_present]
 bp = ax2.boxplot(
     box_data, widths=0.6, patch_artist=True, showmeans=True,
@@ -148,10 +149,10 @@ for patch, color in zip(bp["boxes"], cmap):
 ax2.set_xticks(range(1, len(algos_present) + 1))
 ax2.set_xticklabels(algos_present, rotation=20, ha="right")
 ax2.set_ylabel("Final Cumulative Reward")
-ax2.set_title("Final Reward Distribution per Algorithm")
+#ax2.set_title("Final Reward Distribution per Algorithm")
 ax2.grid(axis="y", linestyle="--", alpha=0.3)
 fig2.tight_layout()
-plt.savefig("plots/final_reward_boxplot_by_algo.pdf")
+plt.savefig("plots_final/final_reward_boxplot_by_algo.pdf")
 plt.show()
 
 # ───────── gather final‑reward samples per degree × algorithm ─────
@@ -176,7 +177,7 @@ bar_width = 0.8 / max(1, len(algos_present))
 
 # ─────────── figure 3: mean ± std bar‑chart ───────────────────────
 x_centres = np.arange(len(degrees_present))
-fig3, ax3 = plt.subplots(figsize=(6.2, 3.2))
+fig3, ax3 = plt.subplots(figsize=(3, 3))
 for j, (algo, color) in enumerate(zip(algos_present, cmap)):
     for i, deg in enumerate(degrees_present):
         vals = deg_algo_vals[deg].get(algo, [])
@@ -194,15 +195,16 @@ ax3.set_xticks(x_centres)
 ax3.set_xticklabels([f"{d:g}" for d in degrees_present])
 ax3.set_xlabel("degree")
 ax3.set_ylabel("Mean Final Reward ± 1 SD")
-ax3.set_title("Mean Final Reward by degree & algorithm")
+#ax3.set_title("Mean Final Reward by degree & algorithm")
 ax3.grid(axis="y", linestyle="--", alpha=0.3)
 ax3.legend(
     [plt.Line2D([0],[0], color=c, lw=6) for c in cmap],
-    algos_present, ncol=1, fontsize=6,
-    loc="upper left", bbox_to_anchor=(1.02, 1.0)
+    algos_present, ncol=2, fontsize=5,
+    loc="upper center", bbox_to_anchor=(0.5, 1.2)
+    #loc="best"
 )
 fig3.tight_layout()
-plt.savefig("plots/final_reward_bar_mean_std_by_deg_algo.pdf", bbox_inches="tight")
+plt.savefig("plots_final/final_reward_bar_mean_std_by_deg_algo.pdf", bbox_inches="tight")
 plt.show()
 
 # ─────────── figure 4: one box‑plot per degree ────────────────────
@@ -217,7 +219,7 @@ for deg in degrees_present:
     if not data:
         continue
 
-    fig_d, ax_d = plt.subplots(figsize=(5.8, 2.8))
+    fig_d, ax_d = plt.subplots(figsize=(3,3))
     bp_d = ax_d.boxplot(
         data, widths=0.6, patch_artist=True, showmeans=True,
         meanprops=dict(marker="o", markerfacecolor="k",
@@ -230,9 +232,9 @@ for deg in degrees_present:
     ax_d.set_xticks(range(1, len(labels)+1))
     ax_d.set_xticklabels(labels, rotation=20, ha="right")
     ax_d.set_ylabel("Final Cumulative Reward")
-    ax_d.set_title(f"Final Reward Distribution – degree {deg:g}")
+    #ax_d.set_title(f"Final Reward Distribution – degree {deg:g}")
     ax_d.grid(axis="y", linestyle="--", alpha=0.3)
     fig_d.tight_layout()
-    fname = f"plots/final_reward_box_deg_{str(deg).replace('.', 'p')}.pdf"
+    fname = f"plots_final/final_reward_box_deg_{str(deg).replace('.', 'p')}.pdf"
     plt.savefig(fname)
     plt.show()
