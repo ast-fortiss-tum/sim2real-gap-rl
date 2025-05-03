@@ -45,7 +45,7 @@ class DenoisingDataset(Dataset):
 # 2. Define the Online Recurrent Denoising Autoencoder
 # ------------------------------
 class OnlineDenoisingAutoencoder(nn.Module):
-    def __init__(self, input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1):
+    def __init__(self, input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1): #16,32
         super(OnlineDenoisingAutoencoder, self).__init__()
         self.input_linear = nn.Linear(input_dim, proj_dim)
         self.lstm = nn.LSTM(input_size=proj_dim, hidden_size=lstm_hidden_dim, num_layers=num_layers, batch_first=True)
@@ -91,9 +91,13 @@ def main():
     generator.manual_seed(args.seed)
     # ──────────────────────────────────────────────────────────────
 
-    base = "manual_control_dataset/"
-    clean_file = f"{base}clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
-    noisy_file = f"{base}noisy/noisy_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
+    #base = "manual_control_dataset/"
+    #clean_file = f"{base}clean/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
+    #noisy_file = f"{base}noisy/noisy_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
+
+    base = "shift_dataset/"
+    clean_file = f"{base}clean_shift/clean_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
+    noisy_file = f"{base}noisy_shift/noisy_dataset_degree_{args.degree}_Gaussian_noise_{args.noise}_bias_{args.bias}.npy"
 
     full_dataset = DenoisingDataset(clean_file, noisy_file)
     total_samples = len(full_dataset)
@@ -152,7 +156,7 @@ def main():
         scheduler.step(avg_val)
 
         # Early stopping check
-        path = f"Denoising_AE/best_online_noise_{args.noise}_bias_{args.bias}_deg_{args.degree}.pth"
+        path = f"Denoising_AE_2/best_online_noise_{args.noise}_bias_{args.bias}_deg_{args.degree}2.pth"
         if avg_val < best_val:
             best_val = avg_val
             no_improve = 0
