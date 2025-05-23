@@ -9,6 +9,15 @@ from matplotlib.path import Path  # for point‐in‐polygon testing
 from matplotlib.collections import LineCollection  # for multi‐colored trace segments
 import matplotlib.lines as mlines  # for custom legend handles
 
+from matplotlib.animation import PillowWriter, FFMpegWriter   # Pillow ships with Matplotlib
+import matplotlib as mpl
+
+mpl.rcParams['axes.titlesize']     = 20   # subplot title
+mpl.rcParams['axes.labelsize']     = 20   # x/y labels
+mpl.rcParams['xtick.labelsize']    = 20   # x‐axis tick labels
+mpl.rcParams['ytick.labelsize']    = 20   # y‐axis tick labels
+mpl.rcParams['legend.fontsize']    = 20
+
 def load_data(file_path):
     """Load JSON data from a file."""
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -213,9 +222,9 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
     angle_line, = ax4.plot([], [], color='magenta', label='Driven Angle')
     cte_indicator, = ax4.plot([], [], 'o', color='red', markersize=10, label='High CTE')
     warning_text = ax4.text(0.95, 0.95, "", transform=ax4.transAxes,
-                            ha='right', va='top', fontsize=12, color='red')
+                            ha='right', va='top', fontsize=14, color='red')
     lap_text = ax4.text(0.95, 0.85, "", transform=ax4.transAxes,
-                        ha='right', va='top', fontsize=12, color='blue')
+                        ha='right', va='top', fontsize=14, color='blue')
     
     ax4.set_title("Driven Angle")
     ax4.set_xlabel("[s]")
@@ -456,7 +465,20 @@ def animate_all(ax1, ax2, ax3, ax4, poses, times, lanes, going_times, going_flag
         blit=False,
         repeat=False
     )
-    return ani
+
+    # Instead of using frames=range(total_frames), step by skip:
+    skip = 25  # only draw every 2nd frame
+    frames_to_use = range(0, total_frames, skip)
+
+    #ani_export = animation.FuncAnimation(ax1.figure, update, frames=range(total_frames), init_func=init, blit=False, repeat=False)
+    ani_export = animation.FuncAnimation(ax1.figure, update, frames=frames_to_use, init_func=init, blit=True, repeat=False)
+
+    ax1.set_xticklabels([])
+    ax1.set_yticklabels([])
+
+    ax1.margins(x=0,y=0)
+
+    return ani, ani_export, frames_to_use
 
 def main():
     parser = argparse.ArgumentParser(
@@ -469,8 +491,8 @@ def main():
     name = args.name
     
     # --- Load poses JSON ---
-    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_poses.json'
-    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset3/{name}_moving.json'
+    poses_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/demo/{name}_poses.json'
+    going_file_path = f'/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/demo/{name}_moving.json'
     
     poses_data = load_data(poses_file_path)
     lanes = poses_data.get("lanes")
@@ -500,7 +522,9 @@ def main():
         going_times = ast.literal_eval(going_times)
     
     # --- Create a figure with four subplots ---
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 16))
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 14))
+
+    fig.subplots_adjust(hspace=0.5)   # default is ~0.2
     
     # Draw lanes on ax1 so they appear in the background.
     plot_lanes(ax1, lanes)
@@ -531,11 +555,21 @@ def main():
 
     ax1.set_facecolor('grey')
     
-    ani = animate_all(ax1, ax2, ax3, ax4, poses, poses_time, lanes, going_times, going_list,
+    ani, ani_exp, ftu = animate_all(ax1, ax2, ax3, ax4, poses, poses_time, lanes, going_times, going_list,
                       steps_per_segment=8, subsample=200, cte_threshold=3.0)
     
-    plt.tight_layout()
-    plt.show()
+    # ----------------------------------------------------------
+    # How long should the GIF be?
+    desired_secs = 10                           # ← your target run time
+
+    # Frames per second that will stretch the GIF to the full length
+    target_fps = max(1, len(ftu) / desired_secs / desired_secs)
+
+    writer = PillowWriter(fps=target_fps)   # loop 0 = repeat forever
+    ani_exp.save("final3.gif", writer=writer)
+
+    #plt.tight_layout()
+    #plt.show()
 
 if __name__ == '__main__':
     main()

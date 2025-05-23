@@ -179,7 +179,7 @@ def analyze_run(poses_data, moving_data, survival_threshold, safe_thresholds):
             for st in safe_thresholds:
                 if curr_cte <= st:
                     safe_turns[st] += abs(diff)
-            if curr_cte > survival_threshold:
+            if curr_cte > survival_threshold or cumulative_turn > 1080:
                 survival_turn = cumulative_turn
 
         # Compute speed.
@@ -215,7 +215,7 @@ def main():
     parser.add_argument('--folder', type=str,
                         default='/home/cubos98/catkin_ws/src/Vehicle/results_reality',
                         help="Root folder containing dataset folders.")
-    parser.add_argument('--dataset', type=str, default='dataset3',
+    parser.add_argument('--dataset', type=str, default='dataset_final',
                         help="The dataset folder to process (e.g., dataset3).")
     parser.add_argument('--survival_threshold', type=float, default=4.0,
                         help="The survival CTE threshold (a single float).")

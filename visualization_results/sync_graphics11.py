@@ -215,7 +215,7 @@ def main():
                     "Also computes mean speed and maximum CTE."
     )
     parser.add_argument('--folder', type=str,
-                        default='/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/',
+                        default='/home/cubos98/catkin_ws/src/Vehicle/results_reality/dataset2/demo',
                         help="Folder containing run files.")
     parser.add_argument('--survival_threshold', type=float, default=4.0,
                         help="The survival CTE threshold (a single float).")
