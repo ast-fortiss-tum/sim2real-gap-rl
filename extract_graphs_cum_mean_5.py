@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Five‑algorithm comparison (CLI filter)
+Five-algorithm comparison (CLI filter)
 Plots are now sorted descending by final reward.
 """
 
@@ -11,7 +11,7 @@ from collections import defaultdict
 # ────────────────────────── CLI options ───────────────────────────
 parser = argparse.ArgumentParser()
 parser.add_argument("--exclude", nargs="*", default=[],
-                    help="algorithms to leave out (space‑separated list)")
+                    help="algorithms to leave out (space-separated list)")
 args = parser.parse_args()
 
 # ───────────────────────── experiment list ────────────────────────
@@ -20,12 +20,23 @@ algos = [a for a in algos_all if a not in args.exclude]
 if not algos:
     raise SystemExit("All algorithms excluded – nothing to do.")
 
+# 💡 pretty labels used only for plotting ──────────────────────────
+label_map = {
+    "ContSAC_t":   r"SAC$_{\mathrm{Real-20}}$",   # ← new
+    "ContSAC_STR": r"SAC$_{\mathrm{PFT}}$",      # (optional) tidy the others
+    "DARC_OFF":    r"SAC$_{\mathrm{Sim-200}}$",                   # sub-scripts also fine here
+    "DARC_ON":     r"DARC",
+}
+
+def lbl(a: str) -> str:
+    """Internal id → publication-ready label (fallback = unchanged)."""
+    return label_map.get(a, a)
+
 # ───────────────────────── settings ───────────────────────────────
 folder_path   = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_Magnum"
-drop_first_k  = 0                             
+drop_first_k  = 0
 base_regex    = re.compile(
-    r"(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*use_denoiser_0)",
-    #r"(?=.*noise_cfrs_0\.0)",
+    r"(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*use_denoiser_1)",
     re.IGNORECASE,
 )
 algo_pat      = re.compile(rf"^({'|'.join(map(re.escape, algos))})", re.IGNORECASE)
@@ -45,8 +56,8 @@ plt.rcParams.update({
     "ytick.labelsize": 7,
     "grid.linestyle": "--",
     "grid.alpha":     0.3,
-    "figure.dpi":     300,
-    "savefig.dpi":    300,
+    "figure.dpi":     1200,
+    "savefig.dpi":    1200,
 })
 
 # ──────────────────────── read runs ───────────────────────────────
@@ -63,7 +74,8 @@ for root, _, files in os.walk(folder_path):
     steps, vals = [], []
     for ev in [f for f in files if "tfevents" in f]:
         for e in tf.compat.v1.train.summary_iterator(os.path.join(root, ev)):
-            if not e.summary: continue
+            if not e.summary:
+                continue
             for v in e.summary.value:
                 if v.tag == tag and hasattr(v, "simple_value"):
                     steps.append(e.step)
@@ -75,7 +87,7 @@ for root, _, files in os.walk(folder_path):
     idx   = np.argsort(steps)
     arr   = np.array(vals)[idx][drop_first_k:]
     if algo.lower().startswith("darc"):
-        arr = arr[:-1]
+        arr = arr[:-1]                # drop last fake step
     curve = np.cumsum(arr)
     raw_runs.append({"algo": algo, "degree": degree, "curve": curve})
 
@@ -89,7 +101,7 @@ def pad_to_len(curve_list, length):
         for c in curve_list
     ])
 
-# ───────────── Figure 1 data (per algo) ───────────────────────────
+# ───────────── Figure 1 data (per algo) ───────────────────────────
 group_algo = defaultdict(list)
 max_len     = 0
 for r in raw_runs:
@@ -106,29 +118,25 @@ for algo, curves in group_algo.items():
         len(curves),
     )
 
-# ──────── Sort algorithms by their final median reward (desc) ───────
-# final median = last entry of the median curve
 algos_present = sorted(
     stat_algo.keys(),
     key=lambda a: stat_algo[a][0][-1],
     reverse=True
 )
-# regenerate color map in this new order
 cmap = plt.cm.tab10(np.linspace(0, 1, len(algos_present)))
 
-# ───────────────────────── figure 1: curves ───────────────────────
+# ───────────────────────── figure 1: curves ───────────────────────
 fig1, ax1 = plt.subplots(figsize=(3, 3))
 for color, algo in zip(cmap, algos_present):
     med, q1, q3, n = stat_algo[algo]
-
     ep = np.arange(1, len(med) + 1)
-    ax1.plot(ep, med, "-", color=color, lw=1.4, label=f"{algo}")
+
+    ax1.plot(ep, med, "-", color=color, lw=1.4, label=lbl(algo))
     ax1.fill_between(ep, q1, q3, color=color, alpha=0.25)
 
 ax1.set_xlim(1, 20)
 ax1.set_xlabel("Episode")
 ax1.set_ylabel("Median Cumulative Reward")
-#ax1.set_title("Cumulative Reward (median ± IQR)")
 ax1.grid(True, axis="y")
 fig1.legend(*ax1.get_legend_handles_labels(), fontsize=6,
             loc="center", bbox_to_anchor=(0.4, 0.3))
@@ -136,7 +144,7 @@ fig1.tight_layout()
 plt.savefig("plots_final/cumreward_median_IQR_by_algo.png", bbox_inches="tight")
 plt.show()
 
-# ───────────── figure 2: box‑plot final per algorithm ─────────────
+# ───────────── figure 2: box-plot final per algorithm ─────────────
 fig2, ax2 = plt.subplots(figsize=(3, 3))
 box_data = [[c[-1] for c in group_algo[a]] for a in algos_present]
 bp = ax2.boxplot(
@@ -148,27 +156,24 @@ for patch, color in zip(bp["boxes"], cmap):
     patch.set_edgecolor("k"); patch.set_linewidth(0.8)
 
 ax2.set_xticks(range(1, len(algos_present) + 1))
-ax2.set_xticklabels(algos_present, rotation=20, ha="right")
+ax2.set_xticklabels([lbl(a) for a in algos_present], rotation=20, ha="right")
 ax2.set_ylabel("Final Cumulative Reward")
-#ax2.set_title("Final Reward Distribution per Algorithm")
 ax2.grid(axis="y", linestyle="--", alpha=0.3)
 fig2.tight_layout()
 plt.savefig("plots_final/final_reward_boxplot_by_algo.png")
 plt.show()
 
-# ───────── gather final‑reward samples per degree × algorithm ─────
+# ───────── gather final-reward samples per degree × algorithm ─────
 deg_algo_vals = defaultdict(lambda: defaultdict(list))
 for r in raw_runs:
     deg_algo_vals[r["degree"]][r["algo"]].append(r["curve"][-1])
 
-# ─── Sort degrees by overall mean final reward (desc) ─────────────
 degree_means = {
     deg: np.mean([
         v for algo_vals in deg_algo_vals[deg].values() for v in algo_vals
     ])
     for deg in deg_algo_vals
 }
-print("degree means:", degree_means)
 degrees_present = sorted(
     degree_means.keys(),
     key=lambda d: degree_means[d],
@@ -177,7 +182,7 @@ degrees_present = sorted(
 
 bar_width = 0.8 / max(1, len(algos_present))
 
-# ─────────── figure 3: mean ± std bar‑chart ───────────────────────
+# ─────────── figure 3: mean ± std bar-chart ───────────────────────
 x_centres = np.arange(len(degrees_present))
 fig3, ax3 = plt.subplots(figsize=(3, 3))
 for j, (algo, color) in enumerate(zip(algos_present, cmap)):
@@ -196,24 +201,20 @@ for j, (algo, color) in enumerate(zip(algos_present, cmap)):
 ax3.set_xticks(x_centres)
 ax3.set_xticklabels([f"{d:g}" for d in degrees_present])
 ax3.set_xlabel("degree")
-ax3.set_ylabel("Mean Final Reward ± 1 SD")
-#ax3.set_title("Mean Final Reward by degree & algorithm")
+ax3.set_ylabel("Mean Final Reward ± 1 SD")
 ax3.grid(axis="y", linestyle="--", alpha=0.3)
 ax3.legend(
     [plt.Line2D([0],[0], color=c, lw=6) for c in cmap],
-    algos_present, ncol=2, fontsize=5,
+    [lbl(a) for a in algos_present],
+    ncol=2, fontsize=5,
     loc="upper center", bbox_to_anchor=(0.5, 1.2)
-    #loc="best"
 )
 fig3.tight_layout()
 plt.savefig("plots_final/final_reward_bar_mean_std_by_deg_algo.png", bbox_inches="tight")
 plt.show()
 
-# ───────────── Mean final reward matrix (degree × algorithm) ─────────────
-# Rows  : degrees_present (descending overall mean reward)
-# Columns: algos_present  (descending median reward)
+# ───────────── Mean final reward matrix (degree × algorithm) ──────
 mean_matrix = np.full((len(degrees_present), len(algos_present)), np.nan)
-
 for i, deg in enumerate(degrees_present):
     for j, algo in enumerate(algos_present):
         vals = deg_algo_vals[deg].get(algo, [])
@@ -223,17 +224,12 @@ for i, deg in enumerate(degrees_present):
 print("Rows = degrees, Cols = algorithms")
 print("degrees_present:", degrees_present)
 print("algos_present  :", algos_present)
-print("Mean final‑reward matrix:\n", mean_matrix)
+print("Mean final-reward matrix:\n", mean_matrix)
 
-percentage_imp = -(mean_matrix -mean_matrix[:, 1][:, np.newaxis])*100/ mean_matrix[:, 1][:, np.newaxis]
+percentage_imp = -(mean_matrix - mean_matrix[:, 1][:, np.newaxis]) * 100 / mean_matrix[:, 1][:, np.newaxis]
 print("Percentage improvement over ContSAC_STR:\n", percentage_imp)
 
-# Optional: save to disk
-# np.save("mean_final_reward_deg_algo.npy", mean_matrix)
-
-# ────────────────────────── end NEW block ──────────────────────────
-
-# ─────────── figure 4: one box‑plot per degree ────────────────────
+# ─────────── figure 4: one box-plot per degree ────────────────────
 for deg in degrees_present:
     data, labels, colors = [], [], []
     for algo, color in zip(algos_present, cmap):
@@ -256,9 +252,8 @@ for deg in degrees_present:
         patch.set_edgecolor("k"); patch.set_linewidth(0.8)
 
     ax_d.set_xticks(range(1, len(labels)+1))
-    ax_d.set_xticklabels(labels, rotation=20, ha="right")
+    ax_d.set_xticklabels([lbl(a) for a in labels], rotation=20, ha="right")
     ax_d.set_ylabel("Final Cumulative Reward")
-    #ax_d.set_title(f"Final Reward Distribution – degree {deg:g}")
     ax_d.grid(axis="y", linestyle="--", alpha=0.3)
     fig_d.tight_layout()
     fname = f"plots_final/final_reward_box_deg_{str(deg).replace('.', 'p')}.png"

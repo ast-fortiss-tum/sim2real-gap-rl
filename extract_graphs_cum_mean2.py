@@ -36,8 +36,8 @@ plt.rcParams.update({
     "ytick.labelsize": 7,
     "grid.linestyle": "--",
     "grid.alpha": 0.3,
-    "figure.dpi": 300,
-    "savefig.dpi": 300,
+    "figure.dpi": 1200,
+    "savefig.dpi": 1200,
 })
 
 # ──────────────────────── read runs ───────────────────────────────
@@ -112,7 +112,7 @@ ax.grid(True, axis="y")
 fig.legend(*ax.get_legend_handles_labels(), ncol=2,
            bbox_to_anchor=(0.5, 1.02), loc="upper center")
 fig.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("plots/cumreward_median_IQR.pdf")
+plt.savefig("plots/cumreward_median_IQR.png")
 tpl.save("plots/cumreward_median_IQR.tex")
 plt.show()
 
@@ -132,7 +132,7 @@ for i, (deg, c) in enumerate(zip(degrees, colmap)):
         box_data.append(finals)             # plain Python list
         box_pos.append(i + (j-0.5)*width)
         face = c
-        hatch = "/" if den == 0 else "x"    # hatched = OFF, solid = ON
+        hatch = "/" if den == 0 else ""    # hatched = OFF, solid = ON
         box_props.append((face, hatch))
 
 # all boxes must have the same length → trim to min group size
@@ -167,12 +167,12 @@ ax2.grid(axis="y", linestyle="--", alpha=0.3)
 # explicit legend handles
 legend_handles = [
     Patch(facecolor="white", edgecolor="k", hatch="/", label="denoiser OFF"),
-    Patch(facecolor="white", edgecolor="k", hatch="x",   label="denoiser ON")
+    Patch(facecolor="white", edgecolor="k", hatch="",   label="denoiser ON")
 ]
 ax2.legend(handles=legend_handles, loc="upper left", frameon=False, fontsize=6)
 
 fig2.tight_layout()
-plt.savefig("plots/final_reward_boxplot.pdf")
+plt.savefig("plots/final_reward_boxplot.png")
 tpl.save("plots/final_reward_boxplot.tex")
 plt.show()
 

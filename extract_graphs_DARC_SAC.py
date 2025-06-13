@@ -19,11 +19,11 @@ import time
 # ------------------------------------------------------------------ #
 tf.compat.v1.enable_eager_execution()          # harmless if already enabled
 
-folder_path = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_Total"
+folder_path = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_Magnum"
 #folder_path  = "/home/cubos98/Desktop/MA/DARAIL/runs/runs6"
 drop_first_k = 0   # skip first k samples/episodes
 base_regex   = re.compile(
-    r'(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)',
+    r'(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*use_denoiser_0)',
     re.IGNORECASE,
 )
 
@@ -203,7 +203,7 @@ for deg in degrees:
     seeds = sorted(set(sac) & set(dar))
     sac_v = [sac[s] for s in seeds]; dar_v = [dar[s] for s in seeds]
     if len(seeds) < 20:
-        stat, p = wilcoxon(dar_v, sac_v,alternative="two-sided")
+        stat, p = wilcoxon(dar_v, sac_v,alternative="greater")
         tname = "Wilcoxon"
     else:
         stat, p = ttest_rel(dar_v, sac_v)
