@@ -1,6 +1,5 @@
 import os
 import pickle
-
 import numpy as np
 import torch
 import random
@@ -10,24 +9,36 @@ from torch.optim import Adam
 from architectures.gaussian_policy import ContGaussianPolicy
 from architectures.value_networks import ContTwinQNet
 from architectures.utils import polyak_update
-from replay_buffer import ReplayBuffer
+from utils import ReplayBuffer
 from tensor_writer import TensorWriter
+
+def set_global_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 class ContSAC:
     def __init__(self, policy_config, value_config, env, device, log_dir="", running_mean=None,
-                 noise_scale=0.0, bias =0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, gamma=0.99, 
-                 tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, n_games_til_train=1, 
-                 n_updates_per_train=1, max_steps=200, seed=None):
-        # Set the global seed if provided for reproducibility
+                 noise_scale=0.0, bias=0.0, memory_size=1e5, warmup_games=10, batch_size=64, lr=0.0001, 
+                 gamma=0.99, tau=0.003, alpha=0.2, ent_adj=False, target_update_interval=1, 
+                 n_games_til_train=1, n_updates_per_train=1, max_steps=200, seed=None,
+                 noise_indices=None, use_denoiser=1, denoiser_dict=None, stage_tag = "Target"):
+        # Set the global seed if provided for reproducibility.
         if seed is not None:
             set_global_seed(seed)
         
+        self.stage_tag = stage_tag
         self.device = device
         self.gamma = gamma
         self.batch_size = batch_size
-        self.noise_scale = noise_scale  # New parameter for observational noise
+        self.noise_scale = noise_scale  # Parameter for observational noise.
         self.bias = bias
 
+        # Create log directory for TensorWriter.
         path = 'runs/' + log_dir
         if not os.path.exists(path):
             os.makedirs(path)
@@ -35,7 +46,7 @@ class ContSAC:
 
         self.memory_size = memory_size
         self.warmup_games = warmup_games
-        self.memory = ReplayBuffer(self.memory_size, self.batch_size)
+        self.memory = ReplayBuffer(memory_size, batch_size)
 
         self.env = env
         self.action_range = (env.action_space.low, env.action_space.high)
@@ -49,7 +60,6 @@ class ContSAC:
         polyak_update(self.twin_q, self.target_twin_q, 1)
 
         self.tau = tau
-        self.gamma = gamma
         self.n_until_target_update = target_update_interval
         self.n_games_til_train = n_games_til_train
         self.n_updates_per_train = n_updates_per_train
@@ -64,17 +74,74 @@ class ContSAC:
 
         self.total_train_steps = 0
 
+        # New parameters for noise handling and denoising.
+        # If noise_indices is provided (e.g., [100] or [100, 226]), noise is only applied at these indices.
+        self.noise_indices = noise_indices
+
+        self.count_ep_source = 0
+        self.count_ep_target = 0
+
+        # Option to use a denoiser.
+        self.use_denoiser = use_denoiser
+        if self.use_denoiser:
+            d_noise = denoiser_dict["noise"]
+            d_bias = denoiser_dict["bias"]
+            d_degree = denoiser_dict["degree"]
+            # Assume the denoiser was trained with input_dim=1.
+            from train_online_denoising_AE import OnlineDenoisingAutoencoder
+            self.denoiser = OnlineDenoisingAutoencoder(input_dim=1, proj_dim=16, lstm_hidden_dim=32, num_layers=1).to(self.device)
+            self.denoiser.load_state_dict(torch.load(f"Denoising_AE/best_online_noise_{d_noise}_bias_{d_bias}_deg_{d_degree}.pth", 
+                                                     map_location=self.device, weights_only=True))
+            self.denoiser.eval()
+
     def add_obs_noise(self, obs):
-        """Adds Gaussian noise to the observation."""
-        return obs + np.random.normal(0, self.noise_scale, size=obs.shape)
+        """
+        Adds Gaussian noise to the observation.
+        If self.noise_indices is specified, noise is added only to those indices (each index gets a random noise sample plus bias);
+        otherwise, noise is added elementwise.
+        """
+        obs_noisy = np.copy(obs)
+        if self.noise_indices is not None:
+            for idx in self.noise_indices:
+                noise = np.random.normal(0, self.noise_scale) + self.bias
+                obs_noisy[idx] = obs_noisy[idx] + noise
+        else:
+            obs_noisy = obs + np.random.normal(0, self.noise_scale, size=obs.shape)
+        return obs_noisy
+
+    def denoise_observation(self, obs, buffers):
+        """
+        If self.use_denoiser is True, for each index specified in self.noise_indices
+        the current noisy measurement is appended to a per-index buffer. The buffer is then fed
+        to the online denoiser (which expects a sequence input) and the recovered value is used to replace
+        the noisy measurement in the observation.
+        
+        Args:
+            obs (np.ndarray): The current observation.
+            buffers (dict): A dictionary mapping each index (int) to a list that accumulates measurements.
+        Returns:
+            obs_denoised (np.ndarray): Updated observation with denoised values at the specified indices.
+        """
+        obs_denoised = np.copy(obs)
+        for idx in self.noise_indices:
+            buffers[idx].append(obs[idx])
+            acc = buffers[idx]  # Accumulated list of noisy observations for this index.
+            # Create a tensor of shape (1, T, 1) where T=len(acc).
+            acc_tensor = torch.tensor(acc, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(self.device)
+            with torch.no_grad():
+                denoised_seq, _ = self.denoiser.forward_online(acc_tensor)
+            # Use the recovered value of the last time step.
+            denoised_val = denoised_seq[0, -1, :].cpu().numpy()[0]
+            obs_denoised[idx] = denoised_val
+        return obs_denoised
 
     def get_action(self, state, deterministic=False, transform=False):
         with torch.no_grad():
-            state = torch.as_tensor(state[np.newaxis, :].copy(), dtype=torch.float32).to(self.device)
+            state_tensor = torch.as_tensor(state[np.newaxis, :].copy(), dtype=torch.float32).to(self.device)
             if deterministic:
-                _, _, action = self.policy.sample(state, transform)
+                _, _, action = self.policy.sample(state_tensor, transform)
             else:
-                action, _, _ = self.policy.sample(state, transform)
+                action, _, _ = self.policy.sample(state_tensor, transform)
             return action.detach().cpu().numpy()[0]
 
     def train_step(self, states, actions, rewards, next_states, done_masks):
@@ -91,7 +158,7 @@ class ContSAC:
             v = next_q - self.alpha * next_log_prob
             expected_q = rewards + done_masks * self.gamma * v
 
-        # Q backprop
+        # Q-network update.
         q_val, pred_q1, pred_q2 = self.twin_q(states, actions)
         q_loss = functional.mse_loss(pred_q1, expected_q) + functional.mse_loss(pred_q2, expected_q)
 
@@ -99,7 +166,7 @@ class ContSAC:
         q_loss.backward()
         self.twin_q_opt.step()
 
-        # Policy backprop
+        # Policy update.
         s_action, s_log_prob, _ = self.policy.sample(states)
         policy_loss = self.alpha * s_log_prob - self.twin_q(states, s_action)[0]
         policy_loss = policy_loss.mean()
@@ -110,11 +177,9 @@ class ContSAC:
 
         if self.ent_adj:
             alpha_loss = -(self.log_alpha * (s_log_prob + self.target_entropy).detach()).mean()
-
             self.alpha_opt.zero_grad()
             alpha_loss.backward()
             self.alpha_opt.step()
-
             self.alpha = self.log_alpha.exp()
 
         if self.total_train_steps % self.n_until_target_update == 0:
@@ -127,26 +192,38 @@ class ContSAC:
                 'Stats/Avg Alpha': self.alpha.item() if self.ent_adj else self.alpha}
 
     def train(self, num_games, deterministic=False):
+
         self.policy.train()
         self.twin_q.train()
-        for i in range(num_games):
+        for _ in range(num_games):
             total_reward = 0
             n_steps = 0
             done = False
+
+            # Reset environment and get initial observation.
             state = self.env.reset()[0]
             state = self.running_mean(state)
             if self.noise_scale > 0:
-                state = self.add_obs_noise(state)  # Apply noise to the initial observation
-            
+                state = self.add_obs_noise(state)
+            # If denoiser is used, initialize a buffer dictionary for each noise index.
+            if self.use_denoiser and self.noise_indices is not None:
+                denoise_buffers = {idx: [] for idx in self.noise_indices}
+                state = self.denoise_observation(state, denoise_buffers)
+            else:
+                denoise_buffers = None
+
             while not done:
-                if self.total_train_steps <= self.warmup_games:
+                if self.total_train_steps <= self.warmup_games*self.max_steps:
                     action = self.env.action_space.sample()
                 else:
                     action = self.get_action(state, deterministic)
-                next_state, reward, done, _ , _ = self.env.step(action)
+                next_state, reward, done, _, _ = self.env.step(action)
                 next_state = self.running_mean(next_state)
                 if self.noise_scale > 0:
-                    next_state = self.add_obs_noise(next_state)  # Apply noise to the next observation
+                    next_state = self.add_obs_noise(next_state)
+                # If denoiser is enabled, update the observation using the accumulated noisy values.
+                if denoise_buffers is not None:
+                    next_state = self.denoise_observation(next_state, denoise_buffers)
 
                 done_mask = 1.0 if n_steps == self.env._max_episode_steps - 1 else float(not done)
 
@@ -169,19 +246,30 @@ class ContSAC:
                 state = next_state
                 if n_steps > self.max_steps:
                     break
-
-            if i >= self.warmup_games:
-                self.writer.add_scalar('Env/Rewards', total_reward, i)
-                self.writer.add_scalar('Env/N_Steps', n_steps, i)
-                if i % self.n_games_til_train == 0:
+            
+            if self.stage_tag == "Source":
+                self.count_ep = self.count_ep_source
+            else:
+                self.count_ep = self.count_ep_target
+            # Log the episode information.
+            if self.count_ep  >= self.warmup_games:
+                self.writer.add_scalar(f'{self.stage_tag}/Env/Rewards', total_reward, self.count_ep)
+                self.writer.add_scalar(f'{self.stage_tag}/Env/N_Steps', n_steps, self.count_ep)
+                if self.count_ep % self.n_games_til_train == 0:
                     for _ in range(n_steps * self.n_updates_per_train):
                         self.total_train_steps += 1
                         s, a, r, s_, d = self.memory.sample()
                         train_info = self.train_step(s, a, r, s_, d)
-                        self.writer.add_train_step_info(train_info, i)
+                        self.writer.add_train_step_info(train_info, self.count_ep)
                     self.writer.write_train_step()
 
-            print("index: {}, steps: {}, total_rewards: {}".format(i, n_steps, total_reward))
+            # pick & bump the right counter for logging
+            if self.stage_tag == "Source":
+                self.count_ep_source += 1
+            else:
+                self.count_ep_target += 1
+                
+            print("index: {}, steps: {}, total_rewards: {}".format(self.count_ep, n_steps, total_reward))
 
     def eval(self, num_games, render=True):
         self.policy.eval()
@@ -191,24 +279,34 @@ class ContSAC:
             state = self.env.reset()[0]
             state = self.running_mean(state)
             if self.noise_scale > 0:
-                state = self.add_obs_noise(state)  # Apply noise to the initial observation in eval
+                state = self.add_obs_noise(state)
+            # Initialize denoising buffers for evaluation if needed.
+            if self.use_denoiser and self.noise_indices is not None:
+                denoise_buffers = {idx: [] for idx in self.noise_indices}
+                state = self.denoise_observation(state, denoise_buffers)
+            else:
+                denoise_buffers = None
+
             done = False
             total_reward = 0
             while not done:
                 action = self.get_action(state, deterministic=True)
                 next_state, reward, done, _ , _ = self.env.step(action)
-                next_state = self.running_mean(next_state[0])
+                # Handle cases where next_state may be a tuple.
+                if isinstance(next_state, (list, tuple)):
+                    next_state = next_state[0]
+                next_state = self.running_mean(next_state)
                 if self.noise_scale > 0:
-                    next_state = self.add_obs_noise(next_state)  # Apply noise to the next observation
+                    next_state = self.add_obs_noise(next_state)
+                if denoise_buffers is not None:
+                    next_state = self.denoise_observation(next_state, denoise_buffers)
                 total_reward += reward
                 state = next_state
 
-            # Log each episode's reward.
             self.writer.add_scalar('Eval/Reward', total_reward, i)
             reward_all += total_reward
 
         avg_reward = reward_all / num_games
-        # Log the average evaluation reward.
         self.writer.add_scalar('Eval/Avg Reward', avg_reward, num_games)
         print("Average Eval Reward:", avg_reward)
         return avg_reward
@@ -217,27 +315,15 @@ class ContSAC:
         path = 'saved_weights/' + folder_name
         if not os.path.exists(path):
             os.makedirs(path)
-
         torch.save(self.policy.state_dict(), path + '/policy')
         torch.save(self.twin_q.state_dict(), path + '/twin_q_net')
         pickle.dump(self.running_mean, open(path + '/running_mean', 'wb'))
 
-    # Load model parameters
     def load_model(self, folder_name, device):
         prepath = '/home/cubos98/Desktop/MA/DARAIL'
         path = prepath + '/saved_weights/' + folder_name
         self.policy.load_state_dict(torch.load(path + '/policy', map_location=torch.device(device), weights_only=True))
         self.twin_q.load_state_dict(torch.load(path + '/twin_q_net', map_location=torch.device(device), weights_only=True))
-
         polyak_update(self.twin_q, self.target_twin_q, 1)
         polyak_update(self.twin_q, self.target_twin_q, 1)
         self.running_mean = pickle.load(open(path + '/running_mean', "rb"))
-
-def set_global_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False

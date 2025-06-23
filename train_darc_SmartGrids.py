@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 import gymnasium as gym
 from datetime import datetime, timedelta
-#from models.darc import DARC, DARC_two
-#from models.sac import ContSAC
-#from models.darc_denoise import DARC, DARC_two
-from models.darc_refactored import DARC_one, DARC_two
-from models.sac_refractored2 import ContSAC
+from models.darc import DARC_one, DARC_two
+from models.sac import ContSAC
 from models.mpc import MPC
 from utils import ZFilter, EMAZFilter
 from environments.get_customized_envs import (get_new_soc_env, get_new_charge_env, 

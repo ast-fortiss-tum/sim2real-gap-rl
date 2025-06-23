@@ -1,18 +1,17 @@
 import torch
 from torch import nn
 
+""" Utility functions for PyTorch models, including Polyak averaging and noise generation. """
+
 
 def polyak_update(network, target_network, tau):
     for param, target_param in zip(network.parameters(), target_network.parameters()):
         target_param.data.copy_(tau * param.data + target_param.data * (1.0 - tau))
 
-
 def gen_noise(scale, tensor, device):
     return scale * torch.randn(tensor.shape).to(device)
 
-
 ACTIVATION_DICT = {'relu': nn.ReLU(), 'none': lambda x: x}
-
 
 class Model(nn.Module):
     def __init__(self, model_config):

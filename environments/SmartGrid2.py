@@ -30,6 +30,12 @@ from commonpower.utils.helpers import get_adjusted_cost
 from commonpower.utils.param_initialization import *
 from commonpower.control.environments import ControlEnv   
 
+""" This module defines the SmartGrid environment for reinforcement learning experiments.
+It provides a base class for the SmartGrid environment and subclasses for specific configurations,
+such as linear and nonlinear energy storage systems, and a two-household setup.
+The environment is designed to simulate a smart grid with renewable energy sources, loads, and energy storage systems.
+It includes data providers for load and renewable energy profiles, and controllers for managing the system."""
+
 class SmartGridBasic:
     def __init__(self,
                  rl = True,

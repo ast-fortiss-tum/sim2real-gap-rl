@@ -1,14 +1,15 @@
-
 #!/usr/bin/env python3
 import pathlib
 import wandb
 import matplotlib.pyplot as plt
-from functools import partial
 from datetime import datetime, timedelta
+import numpy as np
+from tqdm import tqdm
+import time
 
 # Import the environment creation function from your customized environments module.
-# We assume that get_simple_linear_env now returns the full SmartGrid_Linear instance.
-from environments.get_customized_envs import get_simple_linear_env
+# We assume that get_new_all_eff_env now returns the full SmartGrid_Linear instance.
+from environments.get_customized_envs import get_new_all_eff_env
 
 # Import models, policies, networks, etc.
 from models.sac import ContSAC
@@ -64,38 +65,18 @@ def run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed):
     print("Optimal controller used:", oc_deployer.controllers)
     return oc_history
 
-def run_custom_deployment(sys, m1, n1, e1, fixed_start, horizon, eval_seed, alg_config, agent_name):
-    """Run deployment using a customized SAC controller (e.g., ContSAC or DARC)."""
-    agent = RLControllerSAC_Customized(
-        name=agent_name,
-        safety_layer=ActionProjectionSafetyLayer(
-            penalty=DistanceDependingPenalty(penalty_factor=0.001)
-        ),
-    )
-    history = ModelHistory([sys])
-    deployer = DeploymentRunner(
-        sys=sys,
-        global_controller=agent,
-        alg_config=alg_config,
-        wrapper=SingleAgentWrapper,
-        forecast_horizon=horizon,
-        control_horizon=horizon,
-        history=history,
-        seed=eval_seed
-    )
-    deployer.run(n_steps=24, fixed_start=fixed_start)
-    print(f"{agent_name} controller used:", deployer.controllers)
-    return history
-
 def extract_cost_soc(history, m1, n1, e1):
-    """Extract the total cost and SOC history from a ModelHistory instance."""
+    """
+    Extract the total cost and SOC history from a ModelHistory instance,
+    excluding the last value of each.
+    """
     power_import_cost = history.get_history_for_element(m1, name='cost')
     dispatch_cost = history.get_history_for_element(n1, name='cost')
     total_cost = [
         (power_import_cost[t][0], power_import_cost[t][1] + dispatch_cost[t][1])
-        for t in range(len(power_import_cost))
+        for t in range(len(power_import_cost)) 
     ]
-    soc = history.get_history_for_element(e1, name="soc")
+    soc = history.get_history_for_element(e1, name="soc") 
     return total_cost, soc
 
 def plot_comparisons(oc_cost, oc_soc):
@@ -113,7 +94,7 @@ def plot_comparisons(oc_cost, oc_soc):
 
     # SOC Comparison
     plt.figure()
-    plt.plot(range(len(oc_soc)), [-x[1] for x in oc_soc], label="Optimal Control SOC", marker="o")
+    plt.plot(range(len(oc_soc)), [x[1] for x in oc_soc], label="Optimal Control SOC", marker="o")
     plt.xticks(rotation=45)
     plt.xlabel("Timestamp")
     plt.ylabel("State of Charge (SOC)")
@@ -122,35 +103,100 @@ def plot_comparisons(oc_cost, oc_soc):
     plt.tight_layout()
     plt.show()
 
-def main():
+def evaluate_mpc(sys, m1, n1, e1, fixed_start, horizon, num_games=10, base_seed=42):
+    """
+    Evaluate the MPC (Optimal Controller) on the provided system.
+    
+    Args:
+      sys: The system/environment.
+      m1, n1, e1: Elements from the system used for cost and SOC extraction.
+      fixed_start: The fixed starting datetime, if any.
+      horizon: Forecast and control horizon.
+      num_games: Number of evaluation episodes.
+      base_seed: Base seed to vary the experiment initialization.
+      
+    Returns:
+      avg_daily_cost: Average daily cost over all experiments.
+      all_daily_costs: List of daily costs for each experiment.
+      std_daily_cost: Standard deviation of the daily cost.
+      avg_cost_per_time: Average cost per timestep (averaged over experiments).
+      std_cost_per_time: Standard deviation of cost per timestep.
+    """
+    all_daily_costs = []
+    cost_series_all = []
+    for episode in tqdm(range(num_games), desc="Evaluating MPC episodes"):
+        current_seed = base_seed + episode  # Increment seed for each run
+        oc_history = run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, current_seed)
+        cost_series = get_adjusted_cost(oc_history, sys)[:-1]  # List of cost per timestep
+        daily_cost = sum(cost_series)
+        all_daily_costs.append(daily_cost)
+        cost_series_all.append(cost_series)
 
+    avg_daily_cost = np.mean(all_daily_costs)
+    std_daily_cost = np.std(all_daily_costs)
+    
+    # Convert cost_series_all to a numpy array for per-timestep statistics.
+    cost_series_all = np.array(cost_series_all)
+    avg_cost_per_time = np.mean(cost_series_all, axis=0)
+    std_cost_per_time = np.std(cost_series_all, axis=0)
+    
+    return avg_daily_cost, all_daily_costs, std_daily_cost, avg_cost_per_time, std_cost_per_time
+
+def main():
     eval_seed = 43
 
-    SG = get_new_all_eff_env(degree=0.5, rl=False, seed=eval_seed)
+    SG = get_new_all_eff_env(degree=0.5, rl=False, seed=eval_seed) # To be selected depending on the environment tested in DARC and ContSAC code!!
     sys = SG.sys
     m1 = SG.m1
     n1 = SG.n1
     e1 = SG.e1
 
     horizon = timedelta(hours=24)
-    #fixed_start = datetime.strptime("27.11.2016", "%d.%m.%Y")
     fixed_start = None
-    # ----------------------------
 
+    # Evaluate MPC (Optimal Controller) over multiple experiments
+    (avg_daily_cost, all_daily_costs, std_daily_cost,
+     avg_cost_per_time, std_cost_per_time) = evaluate_mpc(sys, m1, n1, e1, fixed_start, horizon,
+                                                         num_games=2, base_seed=42)
+
+    print("MPC Evaluation Results:")
+    print("Average Daily Cost:", avg_daily_cost)
+    print("Daily Costs for each experiment:", all_daily_costs)
+    print("Standard Deviation of Daily Cost:", std_daily_cost)
+    print("Average Cost per Timestep:", avg_cost_per_time)
+
+    # Plot the standard deviation of cost per timestep
+    plt.figure()
+    plt.plot(std_cost_per_time, marker='o', label="Std of Cost per Timestep")
+    plt.xlabel("Timestep")
+    plt.ylabel("Standard Deviation of Cost")
+    plt.title("Standard Deviation of Cost per Timestep over MPC Episodes")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # Optionally, run one deployment to extract and plot cost and SOC comparisons.
     oc_history = run_optimal_control(sys, m1, n1, e1, fixed_start, horizon, eval_seed)
-
-    # ----------------------------
-    # Extract Histories and Compare
-    # ----------------------------
     oc_total_cost, oc_soc = extract_cost_soc(oc_history, m1, n1, e1)
-
+    print("Optimal Control Cost:", [x[1] for x in oc_total_cost])
     plot_comparisons(oc_total_cost, oc_soc)
 
-    # Daily cost comparison
-    daily_cost_oc = sum(get_adjusted_cost(oc_history, sys))
+    # Create timesteps for the x-axis (from 1 to 24)
+    timesteps = np.arange(1, len(avg_cost_per_time) + 1)
 
-    print("Daily cost:")
-    print(f" Optimal Control: {daily_cost_oc}")
+    plt.figure(figsize=(10, 6))
+    plt.plot(timesteps, avg_cost_per_time, label="Average Cost per Timestep", color="blue", marker='o')
+    plt.fill_between(timesteps, 
+                    avg_cost_per_time - std_cost_per_time, 
+                    avg_cost_per_time + std_cost_per_time,
+                    color="blue", alpha=0.3)
+    plt.xlabel("Timestep")
+    plt.ylabel("Average Cost per Timestep")
+    plt.title("Average Cost per Timestep vs Timestep during Evaluation")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     main()

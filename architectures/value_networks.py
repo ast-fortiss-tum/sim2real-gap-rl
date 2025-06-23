@@ -2,6 +2,9 @@ import torch
 from torch import nn
 from architectures.utils import Model
 
+"""This module defines Q-networks for reinforcement learning, including continuous and discrete action spaces.
+It implements both single and twin Q-networks, allowing for different configurations based on the action space type.
+The networks are designed to compute Q-values for given states and actions, supporting both continuous and discrete action spaces."""
 
 class ContQNet(nn.Module):
     def __init__(self, model_config):

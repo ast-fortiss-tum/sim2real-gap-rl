@@ -26,7 +26,7 @@ for bias in 0.5; do
     for degree in 0.5 0.65 0.8; do
       echo "-----------------------------------------------------"
       echo "Preparing Datasets: bias=${bias}, degree=${degree}, noise=${noise}"
-      python3 extract_dataset.py \
+      python3 extract_dataset_DAE.py \
         --seed ${SEED} \
         --bias ${bias} \
         --degree ${degree} \

@@ -1,5 +1,6 @@
 .venv_DARAIL
-runs
+#runs
 logs
 .venv
-saved_weights
+saved_weights/
+test_run/
