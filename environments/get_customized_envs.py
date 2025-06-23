@@ -1,6 +1,13 @@
 from datetime import timedelta
 from environments.smartgrid_env import SmartGrid_Linear, SmartGrid_Nonlinear, SmartGrid_TwoHouses
 
+"""
+This module provides factory functions to create customized SmartGrid environments for reinforcement learning experiments.
+Each function returns an instance of a gym.Env (ControlEnv) configured with specific parameters.
+The environments are based on the SmartGrid_Linear and SmartGrid_Nonlinear classes, allowing for various configurations such as battery parameters, capacity, and efficiency settings.
+These environments can be used for testing different scenarios in reinforcement learning, such as varying battery efficiencies, power limits, and capacities.
+"""
+
 def get_simple_linear_env(seed, rl=True, fixed_start="27.11.2016"):
     """
     Factory function to create a linear SmartGrid environment.
