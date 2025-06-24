@@ -7,6 +7,15 @@ from torchvision import transforms
 from PIL import Image
 import numpy as np
 
+""""
+possible improvements:
+1. Add data augmentation techniques to the transformations.
+2. Implement early stopping based on validation loss.
+3. Use a learning rate scheduler to adjust the learning rate during training.
+4. Save model checkpoints at regular intervals.
+5. Implement a validation set to monitor overfitting.
+"""
+
 # Define the custom dataset
 class ImageDataset(Dataset):
     def __init__(self, folder_path, transform=None):

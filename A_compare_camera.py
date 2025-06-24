@@ -8,6 +8,7 @@ Enhanced comparison of camera, sim, and mixed images from rosbag with equally-sp
     /camera, /sim/image, /mixed_image
   - Computes a rich set of metrics using image_metrics_utils
   - Saves JSON metrics and difference images to OUT_DIR
+  CODE PROVIDED BY STEFANO LAMBERTENGHI
 """
 import sys
 import json

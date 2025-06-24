@@ -6,6 +6,10 @@ from torchvision import transforms
 from PIL import Image
 import os
 
+"""This script loads a pre-trained CycleGAN generator model and applies it to a single input image.
+It assumes the generator architecture is the same as used during training.
+The output image is saved to the specified output path."""
+
 # ------------------------------------------------
 # 1. Same Generator architecture as training
 # ------------------------------------------------

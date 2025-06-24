@@ -1,7 +1,10 @@
 # image_metrics_utils.py
 
-
-
+"""image_metrics_utils.py
+Utility functions for calculating various image metrics such as SSIM, PSNR, MSE, and
+histogram similarity. These functions can be used to compare images from different sources,
+such as real images and generated images, or images from different camera setups.
+CODE PROVIDED BY STEFANO LAMBERTENGHI"""
 
 import cv2
 import numpy as np
@@ -23,7 +26,6 @@ from tensorflow.keras.metrics import MeanSquaredError
 from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
 from sklearn.metrics.pairwise import cosine_similarity
 import os
-
 
 
 def calculate_ssim(img1, img2):
