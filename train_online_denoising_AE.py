@@ -10,6 +10,12 @@ import matplotlib.pyplot as plt
 
 """"
 MAIN MODULE TO TRAIN DENOISER AUTOENCODER
+This script trains an online recurrent denoising autoencoder on a dataset of noisy and clean episodes.
+It uses a custom PyTorch Dataset to load the data, defines the model architecture,
+and implements a training loop with early stopping and learning rate scheduling.
+The model is designed to denoise sequences of observations from a manual control task.
+The training process includes validation and saves the best model based on validation loss.
+The model is then used to visualize the denoising performance on a few validation sequences.
 """
 
 # ------------------------------

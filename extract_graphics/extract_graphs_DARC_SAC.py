@@ -23,7 +23,7 @@ folder_path = "/home/cubos98/Desktop/MA/DARAIL/runs/runs_Magnum"
 #folder_path  = "/home/cubos98/Desktop/MA/DARAIL/runs/runs6"
 drop_first_k = 0   # skip first k samples/episodes
 base_regex   = re.compile(
-    r'(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*use_denoiser_0)',
+    r'(?=.*noise_cfrs_0\.0)(?=.*noise_0\.2)(?=.*bias_0\.5)(?=.*use_denoiser_1)',
     re.IGNORECASE,
 )
 
@@ -179,14 +179,17 @@ for deg in degrees:
     sac_e.append (stats[deg]["ContSAC_STR"][1][-1]); darc_e.append(stats[deg]["DARC_ON"][1][-1])
 x = np.arange(len(degrees))
 fig2, ax2 = plt.subplots(figsize=(4.8,3))
-ax2.bar(x-bar_w/2, sac_m,  bar_w, yerr=sac_e,  label="ContSAC_STR",  capsize=3)
-ax2.bar(x+bar_w/2, darc_m, bar_w, yerr=darc_e, label="DARC_ON", capsize=3)
+ax2.bar(x-bar_w/2, sac_m,  bar_w, yerr=sac_e,  label=r"SAC$_{\mathrm{PFT}}$",  capsize=3)
+ax2.bar(x+bar_w/2, darc_m, bar_w, yerr=darc_e, label="DARC", capsize=3)
 ax2.set_xticks(x); ax2.set_xticklabels([str(d) for d in degrees])
 ax2.set_xlabel("degree"); ax2.set_ylabel("Mean Final Cumulative Reward")
 ax2.set_title("Final Cumulative Reward per Degree (mean ±1σ)")
 ax2.grid(axis="y", linestyle="--", alpha=0.3); ax2.legend()
 plt.tight_layout(); plt.savefig("plots/cumreward_darc_vs_sac_bar.pdf"); plt.show()
 
+print("Difference improvement 0.5: ",(darc_m[0]-sac_m[0])/sac_m[0])
+print("Difference improvement 0.65: ",(darc_m[1]-sac_m[1])/sac_m[1])
+print("Difference improvement 0.8: ",(darc_m[2]-sac_m[2])/sac_m[2])
 # ------------------------------------------------------------------ #
 # 6) STATISTICAL TESTS  (paired by seed)                             #
 # ------------------------------------------------------------------ #

@@ -34,7 +34,7 @@ for bias in 0.5; do
       sleep 3
       echo "-----------------------------------------------------"
       echo "Generating DAE: bias=${bias}, degree=${degree}, noise=${noise}"
-      python3 online_denoising_AE.py \
+      python3 train_online_denoising_AE.py \
         --seed ${SEED} \
         --bias ${bias} \
         --degree ${degree} \

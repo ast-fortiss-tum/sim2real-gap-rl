@@ -14,6 +14,15 @@ from gymnasium.envs.registration import register
 import os
 import time
 
+"""
+This script trains DARC and DARC_two models on Smart Grid environments.
+It supports both one-house (non-broken) and two-house (broken) environments.
+The script allows for various configurations such as linear source, variety name, degree, noise scale,
+battery capacity, power limit, and more.
+It also supports saving the model and logging training progress to TensorBoard.
+The script registers the Smart Grid environments with Gymnasium and provides command-line arguments
+for configuring the training process."""
+
 # -----------------------------------------------------------------------------
 # Registration of the Smart Grid environments with Gymnasium.
 # -----------------------------------------------------------------------------

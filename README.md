@@ -1,40 +1,98 @@
-# Off-Dynamics Reinforcement Learning via Domain Adaptation and Reward Augmented Imitation
+# Simulation‑to‑Reality Gap in SmartGrids
 
-This repository provides python implementation for our paper [Off-Dynamics Reinforcement Learning via Domain Adaptation and Reward Augmented Imitation](https://arxiv.org/abs/2411.09891) to appear in Neurips 2024.
+<p align="center">
+  <img src="docs/figs/sim2real_smartgrid.png" alt="Simulation‑to‑Reality workflow" width="600"/>
+</p>
 
-### Abstract
-Training a policy in a source domain for deployment in the target domain under a dynamics shift can be challenging, often resulting in performance degradation. 
-Previous work tackles this challenge by training on the source domain with modified rewards derived by matching distributions between the source and the target optimal trajectories.
-However, pure modified rewards only ensure the behavior of the learned policy in the source domain resembles trajectories produced by the target optimal policies, 
-which does not guarantee optimal performance when the learned policy is actually deployed to the target domain. In this work, we propose to utilize imitation learning to 
-transfer the policy learned from the reward modification to the target domain so that the new policy can generate the same trajectories in the target domain. Our approach, 
-Domain Adaptation and Reward Augmented Imitation Learning (DARAIL), utilizes the reward modification for domain adaptation and follows the general framework of generative 
-adversarial imitation learning from observation (GAIfO) by applying a reward augmented estimator for the policy optimization step. Theoretically, we present an error bound 
-for our method under a mild assumption regarding the dynamics shift to justify the motivation of our method. Empirically, our method outperforms the pure modified reward method 
-without imitation learning and also outperforms other baselines in benchmark off-dynamics environments.
+> **Research goal:** quantify and mitigate the simulation‑to‑reality (Sim2Real) gap when controlling energy‑flexible **SmartGrid micro‑networks**.
 
-### Experiments
-We conducted experiments on four mujoco environments: HalfCheetah, Ant, Walker2d, and Reacher. Also, we experiment on two types of dynamics shift, one is the broken environment and the other one is modifying the gravity/density of the target domain.
+This repository accompanies our experiments on **domain adaptation for power‑flow control**, built on:
 
+* **CommonPower** — network modelling framework by the Chair of Autonomous Systems, TUM.
+* **DARC** — *Domain Adaptation from Rewards using Classifiers* \[1].
 
-Here is an example of training DARAIL on the source broken environment setting. 
-First, we train Darc.
-```console
-$ python train_darc.py --env HalfCheetah --save_file_name HalfCheetah --broken 1 --break_src 1
+---
+
+## Prerequisites
+
+Install Python requirements:
+
+```bash
+pip install -r requirements.txt
 ```
 
-After we obtain the Darc policy, we do the imitation learning. 
-```console
-$ python imitation_learning.py --env HalfCheetah --reward_type 2  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
-```
-To run experiments on other broken settings, you can change the parameter. For broken target setting, you can set --broken 1 --break_src 0. For changing the gravity and density setting, use the following command: --variety-name g/d --degree  0.5/1.5.
+---
 
-To run IPS-ACL or IPS-R: 
-```console
-$ python imitation_learning.py --env HalfCheetah --reward_type 3/13  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
+## Repository structure
+
+```text
+smartgrid/
+├── rest of code      
+├── run_extract_DAE.sh                    # offline dataset + DAE training
+├── run_experiments_total.sh              # main experiment launcher
+├── extract_graphics/                     # result‑parsing & plotting scripts
+├── runs/                                 # TensorBoard logs will appear here
 ```
 
-To run DAIL:
-```console
-$ python imitation_learning.py --env HalfCheetah --reward_type 1  --save_model HalfCheetah/12/24_0.0001_0_0_HalfCheetah-v2/4300 --broken 1 --break_src 1 
+---
+
+## Reproducing the Experiments
+
+### 1. Train a denoising auto‑encoder (DAE)
+
+Offline calibration for dynamic‑different datasets:
+
+```bash
+bash run_extract_DAE.sh
 ```
+
+This extracts the dataset and trains a DAE that later supplies robust latent states to DARC.
+
+### 2. Run Sim2Real discrepancy experiments
+
+```bash
+bash run_experiments_total.sh \
+     lp=1           \ # limit input power
+     noise=1        \ # additive Gaussian sensor noise
+     broken=0       \ # 1 → two‑house setup with faulty battery
+     break_src=0      # 1 → disable battery of second house
+```
+
+Flags can be combined freely to recreate the scenarios reported in the paper.
+
+| Flag        | Meaning                                    |
+| ----------- | ------------------------------------------ |
+| `lp`        | Apply *limited power* constraint to inputs |
+| `noise`     | Inject sensor noise with preset σ          |
+| `broken`    | Switch to **two‑house** environment        |
+| `break_src` | Set battery of house 2 to 0 kWh capacity   |
+
+---
+
+## Result Extraction & Visualisation
+
+All training/evaluation metrics are logged to **TensorBoard** under `runs/`.
+
+To generate publication‑ready tables and graphics:
+
+```bash
+python extract_graphics/make_tables.py   # CSV + LaTeX tables
+python extract_graphics/make_plots.py    # PNG/SVG graphics
+```
+
+The scripts automatically scan `runs/` and save the outputs into `extract_graphics/out/`.
+
+---
+
+## Citation
+
+If you build on this work, please cite:
+
+> \[1] **Johannes Becker**, *et al.* “DARC: Domain Adaptation from Classifiers for Reward‑Shaping in Energy Systems,” IEEE SmartGridComm 2025.
+> **This repo:** *Simulation‑to‑Reality Gap in SmartGrids*, fortiss & TUM, 2025.
+
+---
+
+## License
+
+MIT — see `LICENSE`.

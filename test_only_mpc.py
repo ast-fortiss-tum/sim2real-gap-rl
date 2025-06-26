@@ -47,6 +47,12 @@ from environments.get_customized_envs import (
     get_new_limited_plim_env, get_twoHouses_env
 )
 
+"""
+This script evaluates the MPC (Optimal Controller) on a Smart Grid environment.
+It runs multiple episodes to gather cost and SOC data, computes average costs,
+and plots the results for comparison.
+"""
+
 # ----------------------------
 # Helper functions
 # ----------------------------

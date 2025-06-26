@@ -10,6 +10,8 @@
 
 #Noise set (3): noise on "damaged" (eff:0.5) or perfect linear environment (obs. and (dyn.) shift) Another random distribution
 
+#The noise definition need to be changed in the train_darc_SmartGrids.py script.
+
 # Common parameters
 TRAIN_STEPS=25   # Number of training steps
 LR=0.0008
@@ -18,7 +20,7 @@ BS=12
 UPDATE=1
 DELTAR=1
 ENV_NAME="Smart_Grids"
-SAVE_MODEL="./saved_models_experiments_5/"
+SAVE_MODEL="./saved_models_experiments_1/"
 SAVE_FILE_NAME="test_run_NOISE_SET(1)" 
 SEED=20  # Seed value included
 #FIXED_START="27.11.2016"   # Fixed start date

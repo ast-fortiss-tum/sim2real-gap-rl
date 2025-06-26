@@ -9,7 +9,7 @@ from architectures.utils import Model, gen_noise
 from utils import ReplayBuffer
 from models.sac import ContSAC, set_global_seed
 
-from online_denoising_AE import OnlineDenoisingAutoencoder, DenoisingDataset
+from train_online_denoising_AE import OnlineDenoisingAutoencoder, DenoisingDataset
 
 # ============================================================
 # BaseDARC: Contains common initialization and methods.
