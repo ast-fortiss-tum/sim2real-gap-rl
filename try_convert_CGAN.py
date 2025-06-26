@@ -80,7 +80,7 @@ class Generator(nn.Module):
 def main():
     parser = argparse.ArgumentParser(description="Load CycleGAN Generator and process a single image.")
     parser.add_argument("--image", default = "first_image_received.jpg", help="Path to the input image")
-    parser.add_argument("--model", default = "CycleGAN/CarF_netG_AB_epoch_9.pth", help="Path to the CarF_netG_AB_epoch_9.pth file")
+    parser.add_argument("--model", default = "CycleGAN/cyclegan_model_G_AB.pth ", help="Path to the cyclegan_model_G_AB.pth  file")
     parser.add_argument("--output", default="output.png", help="Where to save the generated image")
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu",
                         help="Device to use (e.g. cuda:0 or cpu)")

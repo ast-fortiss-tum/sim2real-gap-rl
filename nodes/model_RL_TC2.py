@@ -13,7 +13,7 @@ from cv_bridge import CvBridge
 from stable_baselines3 import SAC  # Import the Stable-Baselines3 SAC
 
 # Path to the Stable-Baselines3 SAC model
-MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/final_models/very_very_good_vanilla_m1.zip'
+MODEL_PATH = './policies/model_raw_final.zip'  
 
 FIXED_THROTTLE = True
 STEERING = 0
@@ -120,7 +120,7 @@ def model_node():
 
     rospy.init_node("model_node", anonymous=True)
     rate = rospy.Rate(20)  # Set the desired frequency to 3 Hz
-    rospy.Subscriber("/sim/image", SensorImage, new_image)
+    rospy.Subscriber("/camera", SensorImage, new_image)
 
     while not rospy.is_shutdown():
         # Let ROS handle the callbacks and maintain a 3 Hz loop

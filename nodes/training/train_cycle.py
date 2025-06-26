@@ -4,7 +4,7 @@ Soft Actor-Critic (SAC) Implementation for Line Following in DonkeyCar Environme
 Using a CycleGAN to transform observations before feeding them to the agent.
 
 Author: Cristian Cubides-Herrera
-Date: 2024-11-23
+Date: 2025-01-23
 Modified for performance optimization
 """
 
@@ -19,7 +19,7 @@ import os
 import sys
 
 # Optionally comment this out if it's not needed
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import cv2
 import gym
@@ -129,11 +129,12 @@ class DonkeyCarConfig:
     ]
 
     env_config = {
-        "exe_path": "/home/cubos98/Desktop/MA/sim/sdsim_2/sim_NT.x86_64",
+        "exe_path": "/home/students/Desktop/Cristian_MA/sdsim_2/sim_NT.x86_64", # Remplace if needed
         "host": "127.0.0.1",
         "port": 9091,
         "start_delay": 5.0,
-        "max_cte": 2.5,
+        #"max_cte": 2.5,
+        "max_cte": 5.0,
         "frame_skip": 1,
         "cam_resolution": (120, 160, 3),
         "steer_limit": 1.0,
@@ -163,7 +164,7 @@ class CustomDonkeyEnv(DonkeyEnv):
     Custom DonkeyCar environment with image preprocessing via CycleGAN
     and a tailored reward function for line tracking.
     """
-    def __init__(self, level: str, conf: dict, verbose=0):
+    def __init__(self, level: str, conf: dict, throttle: int, verbose=0):
         """
         Args:
             level (str): environment level name
@@ -172,6 +173,12 @@ class CustomDonkeyEnv(DonkeyEnv):
         """
         super(CustomDonkeyEnv, self).__init__(level=level, conf=conf)
         self.verbose = verbose
+
+    
+
+        self.throttle = throttle
+        self.distance_traveled = 0.0
+        self.prev_pos = None  # will store (x, y, z)
 
         # Define the observation space for (3, 60, 80) in [0,1]
         self.observation_space = gym.spaces.Box(
@@ -191,7 +198,7 @@ class CustomDonkeyEnv(DonkeyEnv):
         # Environment parameters
         self.max_cte = conf["max_cte"]
         self.max_steering_angle = 0.5  # for normalizing steering penalty
-        self.target_speed = 0.8
+        self.target_speed = 0.8 # No need now
 
         # --------------------------------------------------
         #  Load CycleGAN model ONCE (instead of every step)
@@ -214,11 +221,29 @@ class CustomDonkeyEnv(DonkeyEnv):
         ])
 
     def step(self, action: np.ndarray):
-        # We'll run with throttle=0.3, for instance
-        observation, original_reward, done, info = super().step([action[0], 0.3])
+        # We'll run with throttle=0.8, for instance
+        observation, original_reward, done, info = super().step([action[0], self.throttle])
 
         # Preprocess the image (including CycleGAN transformation)
         obs = self._preprocess_image(observation)
+
+        x, y, z = info.get("pos")
+
+        # Current position
+        current_pos = np.array([x, y, z])
+
+        if self.prev_pos is not None:
+            step_dist = np.linalg.norm(current_pos - self.prev_pos)
+            self.distance_traveled += step_dist
+
+        # Update prev_pos
+        self.prev_pos = current_pos
+
+        if done:
+            info["distance_traveled"] = self.distance_traveled
+            # Reset for next episode
+            self.distance_traveled = 0.0
+            self.prev_pos = None
 
         # Calculate custom reward
         cte = info.get('cte', 0.0)
@@ -231,6 +256,10 @@ class CustomDonkeyEnv(DonkeyEnv):
     def reset(self):
         observation = super().reset()
         obs = self._preprocess_image(observation)
+
+        # Reset distance each time we start a new episode
+        self.distance_traveled = 0.0
+        self.prev_pos = None
         return obs
 
     def _preprocess_image(self, observation: np.ndarray) -> np.ndarray:
@@ -288,11 +317,6 @@ class CustomDonkeyEnv(DonkeyEnv):
                         + 0.0 * speed_reward
                         + 0.0 * collision_penalty)
 
-        # Optional: print for debugging
-        # if self.verbose > 1:
-        #     print(f"CTE={cte:.2f} | CTE_Reward={cte_reward:.2f} | Steering_Penalty={steering_penalty:.2f}"
-        #           f" | Speed_Reward={speed_reward:.2f} | Collision_Penalty={collision_penalty} | total={total_reward:.2f}")
-
         return total_reward
 
 # =========================================
@@ -325,37 +349,68 @@ class NvidiaCNNExtractor(BaseFeaturesExtractor):
 # 5. Custom Callbacks
 # =========================================
 
+
 class AverageRewardCallback(BaseCallback):
     """
-    Logs and prints average reward per episode.
+    Logs and prints average reward per episode and also logs
+    total distance traveled in each episode.
     """
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 1):
         super(AverageRewardCallback, self).__init__(verbose)
         self.episode_rewards = []
-        self.episode_lengths = []
+        self.episode_distances = []
 
     def _on_step(self) -> bool:
+        """
+        Called at every step; we watch for the end of an episode
+        by checking info['episode'] (provided by Monitor wrapper).
+        """
         infos = self.locals.get('infos', [])
         for info in infos:
             if 'episode' in info.keys():
+                # 'episode': {'r': total_reward, 'l': total_length}
                 episode_reward = info['episode']['r']
-                episode_length = info['episode']['l']
+
+                # The environment stored total distance as info["distance_traveled"]
+                distance = info.get('distance_traveled', 0.0)
 
                 self.episode_rewards.append(episode_reward)
-                self.episode_lengths.append(episode_length)
+                self.episode_distances.append(distance)
 
                 avg_reward = np.mean(self.episode_rewards)
+                avg_distance = np.mean(self.episode_distances)
+
                 if self.verbose > 0:
-                    print(f"Episode {len(self.episode_rewards)}: "
-                          f"Reward = {episode_reward:.2f}, "
-                          f"Average Reward = {avg_reward:.2f}, "
-                          f"Length = {episode_length}")
+                    print(
+                        f"Episode {len(self.episode_rewards)}: "
+                        f"Reward = {episode_reward:.2f}, "
+                        f"Average Reward = {avg_reward:.2f}, "
+                        f"Distance = {distance:.2f}, "
+                        f"Average Distance = {avg_distance:.2f}"
+                    )
+                
+                # 2) Log to TensorBoard
+                # self.model.num_timesteps holds the total number of steps so far
+                self.logger.record("env/episode_reward", episode_reward)
+                self.logger.record("env/episode_distance", distance)
+                self.logger.record("env/avg_reward", avg_reward)
+                self.logger.record("env/avg_distance", avg_distance)
+
         return True
 
     def _on_training_end(self) -> None:
+        """
+        Called when training ends (i.e., after model.learn()).
+        """
         if self.episode_rewards:
             final_avg_reward = np.mean(self.episode_rewards)
-            print(f"Training completed. Final average reward: {final_avg_reward:.2f}")
+            final_avg_distance = np.mean(self.episode_distances)
+            print(
+                f"Training completed. "
+                f"Final average reward: {final_avg_reward:.2f}, "
+                f"Final average distance: {final_avg_distance:.2f}"
+            )
+            
 
 class SavePreprocessedObservationCallback(BaseCallback):
     """
@@ -418,6 +473,21 @@ class SACLossLogger(BaseCallback):
 # =========================================
 
 def main():
+    # ------------------------------------------------------------------------
+    # Here we define the hyperparameters to embed in our checkpoint names:
+    # ------------------------------------------------------------------------
+    custom_lr = 5.3e-4
+    custom_ent_coef = 0.25
+    custom_tau = 0.02
+    custom_gamma = 0.99
+    custom_batch_size = 256
+    total_timesteps = 1000000
+    throttle = 0.45
+
+    # Create a string to embed in the checkpoint/model names
+    param_str = f"lr{custom_lr}_ent{custom_ent_coef}_tau{custom_tau}_gamma{custom_gamma}_bs{custom_batch_size}_throttle{throttle}"
+    name_prefix = f"model_Ch_{param_str}"  # e.g. model_Ch_lr7.3e-4_ent0.25_...
+
     # Initialize configuration
     config = DonkeyCarConfig()
 
@@ -430,17 +500,12 @@ def main():
     # Create the environment
     def make_env():
         def _init():
-            env = CustomDonkeyEnv(level=config.env_list[1], conf=config.env_config, verbose=0)
+            env = CustomDonkeyEnv(level=config.env_list[1], conf=config.env_config, throttle = throttle, verbose=0)
             env = Monitor(env)
             return env
         return _init
 
-    # If you only want 1 env, stick with DummyVecEnv:
     env = DummyVecEnv([make_env()])
-    # If you can launch multiple donkey sims on different ports, you can parallelize:
-    # from stable_baselines3.common.vec_env import SubprocVecEnv
-    # num_envs = 4
-    # env = SubprocVecEnv([make_env() for _ in range(num_envs)])
 
     # Policy kwargs to use the custom CNN
     policy_kwargs = dict(
@@ -451,9 +516,9 @@ def main():
     average_reward_callback = AverageRewardCallback(verbose=1)
     sac_loss_logger = SACLossLogger(log_dir="./sac_losses_tensorboard_GAN_pc/", verbose=1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=10000,
+        save_freq=50000,
         save_path='./sac_donkeycar_checkpoints_GAN_pc/',
-        name_prefix='sac_donkeycar_GAN_pc_try2',
+        name_prefix=name_prefix,  # <--- Incorporate parameters into the checkpoint name!
         verbose=2
     )
     save_observation_callback = SavePreprocessedObservationCallback(
@@ -463,39 +528,36 @@ def main():
     )
     callbacks = CallbackList([
         average_reward_callback,
-        sac_loss_logger,
+        #sac_loss_logger,
         checkpoint_callback,
-        save_observation_callback
+        # Enable or disable as needed:
+        #save_observation_callback
     ])
 
     # Optionally, load from a checkpoint if available:
-    checkpoint_path = "./sac_donkeycar_checkpoints_GAN_pc/sac_donkeycar_GAN_pc_X_steps.zip"
+    checkpoint_path = "./sac_donkeycar_checkpoints_GAN_pc/(fill).zip"
 
     try:
         model = SAC.load(checkpoint_path, env=env)
-        print(f"Loaded model from checkpoint: {checkpoint_path}")
-
-        # Example of changing the learning rate on the fly
-        new_learning_rate = 2e-4
-        for param_group in model.policy.optimizer.param_groups:
-            param_group['lr'] = new_learning_rate
-        print(f"Learning rate updated to {new_learning_rate}")
+        print(f"Successfully loaded model from checkpoint: {checkpoint_path}")
+        # Customize parameters after loading if desired:
+        model.learning_rate = custom_lr
+        model.ent_coef = custom_ent_coef
 
     except FileNotFoundError:
         print(f"No checkpoint found at {checkpoint_path}. Training from scratch.")
         model = SAC(
-            policy="MlpPolicy",  # or "CnnPolicy" if you want the built-in CNN
+            policy="MlpPolicy",
             env=env,
-            learning_rate=5.3e-4,
-            buffer_size=60000,
+            learning_rate=custom_lr,
+            buffer_size=70000,
             learning_starts=1,
-            batch_size=256,
-            tau=0.02,
-            gamma=0.99,
+            batch_size=custom_batch_size,
+            tau=custom_tau,
+            gamma=custom_gamma,
             train_freq=1,
             gradient_steps=1,
-            ent_coef=0.25,
-            target_update_interval=1,
+            ent_coef=custom_ent_coef,
             policy_kwargs=policy_kwargs,
             verbose=1,
             seed=seed,
@@ -503,17 +565,29 @@ def main():
             tensorboard_log="./sac_donkeycar_tensorboard_GAN_pc/",
         )
 
+    # ----------------------------------------
+    # Print out current hyperparameters
+    # ----------------------------------------
+    print(f"Starting training with parameters:")
+    print(f"  Learning Rate : {model.learning_rate}")
+    print(f"  Ent Coef      : {model.ent_coef}")
+    print(f"  Batch Size    : {model.batch_size}")
+    print(f"  Tau           : {model.tau}")
+    print(f"  Gamma         : {model.gamma}")
+    print(f"  Throttle      : {throttle}")
+
     # Train
-    total_timesteps = 1000000
-    print("Starting training...")
     model.learn(
         total_timesteps=total_timesteps,
         callback=callbacks
     )
 
-    # Save final model
-    model.save("sac_donkeycar_new_track")
-    print("Model saved as 'sac_donkeycar_new_track'.")
+    # ----------------------------------------
+    # Save final model with the param_str
+    # ----------------------------------------
+    final_model_name = f"{name_prefix}_final_{total_timesteps}"
+    model.save(final_model_name)
+    print(f"Model saved as '{final_model_name}'.")
 
     # Close environment
     env.close()

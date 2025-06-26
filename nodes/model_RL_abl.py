@@ -20,7 +20,7 @@ from stable_baselines3 import SAC  # Import the Stable-Baselines3 SAC
 
 
 # Path to the Stable-Baselines3 SAC model
-MODEL_PATH = '/home/cubos98/catkin_ws/src/Vehicle/final_models/model_Ch_lr0.00053_ent0.25_tau0.02_gamma0.99_bs256_throttle0.45_50000_steps.zip'
+MODEL_PATH = './policies/model_raw_final.zip'  
 FIXED_THROTTLE = True
 STEERING = 0
 THROTTLE = 1
@@ -101,7 +101,7 @@ prev_time = None
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Adjust this path to your own environment if needed:
 dir_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-model_path = os.path.join(dir_path, "CycleGAN", "CarF_netG_AB_epoch_9.pth")
+model_path = os.path.join(dir_path, "CycleGAN", "cyclegan_model_G_AB.pth ")
 
 netG_AB = Generator(input_nc=3, output_nc=3, ngf=64, n_residual_blocks=6).to(device)
 netG_AB.load_state_dict(torch.load(model_path, map_location=device))

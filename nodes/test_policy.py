@@ -100,34 +100,16 @@ def main():
     
     env = DummyVecEnv([make_env])  # Vectorized environment
     
-    # Check if a checkpoint exists
-    #env = VecNormalize.load("nodes/vecnormalize_53.pkl", env)
-
     # Load the trained model
-    #model_path = "./final_models/sac_donkeycar_200000_steps.zip"
-    #model_path2 = "./final_models/Model_try_1_normalized.zip"
-    #model_path = "./final_models/very_very_good_vanilla_m1.zip"
-    model_path = "./final_models/very_good_GAN_m2.zip"
-
-    ################
-
-    #check2 = torch.load(model_path2, map_location=torch.device('cpu'))
-    #check = torch.load(model_path, map_location=torch.device('cpu'))
-
-
-    #print("Does nor work:   ", check2.keys())
-    #print("Works:  ", check.keys())
-    
-
-    ################
-
+    #model_path = "./policies/model_raw_final.zip"
+    model_path = "./policies/model_cycle_final.zip"
 
     model = SAC.load(model_path)
     print(f"Successfully loaded model from checkpoint: {model_path}")
 
     # Evaluate the policy
-    #mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, render=True)
-    #print(f"Mean reward: {mean_reward} +/- {std_reward}")
+    mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, render=True)
+    print(f"Mean reward: {mean_reward} +/- {std_reward}")
 
     # Test the model in the environment     
 
