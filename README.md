@@ -8,9 +8,9 @@
 
 This repository accompanies our experiments on **domain adaptation for power‑flow control**, built on:
 
-* **CommonPower** — network modelling framework by the Chair of Autonomous Systems, TUM.
-* **DARC** — *Domain Adaptation from Rewards using Classifiers* \[1].
-
+* **CommonPower** — network modelling framework by the Chair of Autonomous Systems, TUM \[1].
+* **DARC** — *Domain Adaptation from Rewards using Classifiers* \[2].
+* **DARAIL** (Backbone of the code) \[3].
 ---
 
 ## Prerequisites
@@ -67,11 +67,11 @@ The flags inside the executable are the following:
 | `--noise`          | Additive Gaussian sensor noise (σ). Example script grid uses **0.2** (set 0 = no noise).                                                                              |
 | `--broken`         | Switch to **two-house** environment  `0` = single-house (default)  `1` = two-house                                                                                    |
 | `--break_src`      | Disable battery of house 2 (sets capacity to 0 kWh)  `0` = healthy  `1` = disabled                                                                                    |
-| `--lin_src`        | Source realism level: `1` = perfect linear real data (obs-only shift)  `2` = “damaged” env (obs + dyn shift)                                                          |
-| `--variety-name`   | Environment variety code:<br>• `s` – *single*-bus grid<br>• `c` – *coupled* multi-bus grid<br>• `d` – *damaged* grid (efficiency 0.5)<br>• `v` – *variable* load grid |
-| `--degree`         | Coupling degree between buses (e.g., **0.5**, **0.65**, **0.8**).                                                                                                     |
+| `--lin_src`        | Source which env behaves linear: `0` = target  `1` = source                                                          |
+| `--variety-name`   | Environment variety code:<br>• `s` – SOC-efficiency<br>• `c` – Charging-efficiency<br>• `d` – discharging efficiency<br>• `v` – all effiencies<br>• `lp` – limited power input |
+| `--degree`         | Efficience or degree (for `--variety-name` = `s`,`c`,`d` and `v`) (e.g., **0.5**, **0.65**, **0.8**).                                                                                                     |
 | `--bias`           | Systematic measurement bias added to observations (e.g., **0.5**).                                                                                                    |
-| `--noise_cfrs`     | Extra noise injected into **counter-factual** rollouts (default 0.0).                                                                                                 |
+| `--noise_cfrs`     | Extra noise injected to train classifiers (default 0.0).                                                                                                 |
 | `--use_denoiser`   | Route observations through the pretrained DAE  `0` = no  `1` = yes                                                                                                    |
 | `--train-steps`    | Gradient updates per episode (default 201).                                                                                                                           |
 | `--lr`             | Learning rate (Adam), default **8 × 10⁻⁴**.                                                                                                                           |
@@ -92,23 +92,23 @@ All training/evaluation metrics are logged to **TensorBoard** under `runs/`.
 To generate publication‑ready tables and graphics:
 
 ```bash
-python extract_graphics/make_tables.py   # CSV + LaTeX tables
-python extract_graphics/make_plots.py    # PNG/SVG graphics
+python3 extract_graphics/(selected_script).py   
 ```
 
-The scripts automatically scan `runs/` and save the outputs into `extract_graphics/out/`.
+The scripts automatically scan `runs/` and save the outputs into `plots/`.
 
 ---
-
 ## Citation
 
 If you build on this work, please cite:
 
-> \[1] **Johannes Becker**, *et al.* “DARC: Domain Adaptation from Classifiers for Reward‑Shaping in Energy Systems,” IEEE SmartGridComm 2025.
-> **This repo:** *Simulation‑to‑Reality Gap in SmartGrids*, fortiss & TUM, 2025.
+[1] M. Eichelbeck et al. “CommonPower: A Framework for Safe Data‑Driven Smart Grid Control.” arXiv:2406.03231, 2023. https://arxiv.org/abs/2406.03231
+
+[2] B. Eysenbach et al. “Off‑Dynamics Reinforcement Learning: Training for Transfer with Domain Classifiers.” International Conference on Learning Representations (ICLR), 2021.
+
+[3] Y. Guo, Y. Wang, Y. Shi, P. Xu & A. Liu. “Off‑Dynamics Reinforcement Learning via Domain Adaptation and Reward‑Augmented Imitation.” arXiv:2411.09891, 2024. https://arxiv.org/abs/2411.09891
 
 ---
-
 ## License
+MIT — see LICENSE.
 
-MIT — see `LICENSE`.

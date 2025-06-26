@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Evaluate online RNN denoiser; report Wilcoxon tests on point-wise errors.
-
-Tables show that Recon-Clean error is significantly lower than
-(a) Noisy-Clean, and (b) (Noisy – 0.5)-Clean.
-"""
 
 # ---------------------------------------------------------------------
 # Imports
@@ -21,7 +15,15 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from scipy.stats import entropy, wilcoxon
-# ---------------------------------------------------------------------
+
+""" Main module to train denoising autoencoder on noisy/clean episodes.
+This script trains an online recurrent denoising autoencoder on a dataset of noisy and clean episodes.
+It uses a custom PyTorch Dataset to load the data, defines the model architecture,
+and implements a training loop with early stopping and learning rate scheduling.
+The model is designed to denoise sequences of observations from a manual control task.
+The training process includes validation and saves the best model based on validation loss.
+The model is then used to visualize the denoising performance on a few validation sequences.
+"""
 
 
 # ---------------------------------------------------------------------

@@ -8,6 +8,11 @@ Plots are now sorted descending by final reward.
 import os, re, math, argparse, numpy as np, tensorflow as tf, matplotlib.pyplot as plt
 from collections import defaultdict
 
+""" This script extracts training metrics from TensorBoard event files and plots them.
+It supports exponential smoothing similar to TensorBoard and creates a global legend
+for multiple runs. The script is designed to work with a specific folder structure
+and regex filter to select relevant runs based on their names."""
+
 # ────────────────────────── CLI options ───────────────────────────
 parser = argparse.ArgumentParser()
 parser.add_argument("--exclude", nargs="*", default=[],

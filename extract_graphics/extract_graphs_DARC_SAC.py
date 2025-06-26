@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Compare DARC vs. SAC on cumulative reward (eager‑mode, TFRecordDataset).
+Compare DARC vs. SAC on cumulative reward
 
 Outputs:
   • cumreward_darc_vs_sac_lines.pdf
@@ -13,6 +13,11 @@ import os, re, math, numpy as np, tensorflow as tf, matplotlib.pyplot as plt
 from collections import defaultdict
 from scipy.stats import wilcoxon, ttest_rel
 import time
+
+""" This script extracts training metrics from TensorBoard event files and plots them.
+It supports exponential smoothing similar to TensorBoard and creates a global legend
+for multiple runs. The script is designed to work with a specific folder structure
+and regex filter to select relevant runs based on their names."""
 
 # ------------------------------------------------------------------ #
 # 1) Ensure eager execution & regex‑based filters                     #

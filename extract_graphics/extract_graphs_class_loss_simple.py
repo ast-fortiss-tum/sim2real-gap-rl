@@ -5,6 +5,13 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import itertools
 
+"""
+This script extracts training metrics from TensorBoard event files and plots them.
+It supports exponential smoothing similar to TensorBoard and creates a global legend
+for multiple runs. The script is designed to work with a specific folder structure
+and regex filter to select relevant runs based on their names.
+"""
+
 # --------------------------
 #  SETTINGS & CONFIGURATION
 # --------------------------
