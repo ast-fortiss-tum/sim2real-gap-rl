@@ -1,7 +1,7 @@
 # Simulation‑to‑Reality Gap in SmartGrids
 
 <p align="center">
-  <img src="docs/figs/sim2real_smartgrid.png" alt="Simulation‑to‑Reality workflow" width="600"/>
+  <img src="full_schema.png" alt="Simulation‑to‑Reality workflow" width="600"/>
 </p>
 
 > **Research goal:** quantify and mitigate the simulation‑to‑reality (Sim2Real) gap when controlling energy‑flexible **SmartGrid micro‑networks**.
