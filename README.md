@@ -4,7 +4,7 @@
   <img src="full_schema.png" alt="Simulation‑to‑Reality workflow" width="600"/>
 </p>
 
-> **Research goal:** quantify and mitigate the simulation‑to‑reality (Sim2Real) gap when controlling energy‑flexible **SmartGrid micro‑networks**.
+> **Research goal:** “How can we improve deployment performance, when transferring RL-based policies from simulation to reality without expert knowledge? And what can we learn from already widely researched fields to be applied in a new field such as Smart Grids?”
 
 This repository accompanies our experiments on **domain adaptation for power‑flow control**, built on:
 
