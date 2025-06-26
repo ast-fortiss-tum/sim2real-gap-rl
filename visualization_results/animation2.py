@@ -8,6 +8,10 @@ from matplotlib.path import Path  # for point-in-polygon testing
 from matplotlib.collections import LineCollection  # for multi-colored trace segments
 import matplotlib.lines as mlines  # for custom legend handles
 
+"""This script creates an animation of vehicle poses overlaid on lane data, with color coding
+ based on the vehicle's status (on-track, off-track, or external intervention). 
+ It uses JSON files for input data and matplotlib for visualization."""
+
 def load_data(file_path):
     """Load JSON data from file."""
     with open(file_path, 'r', encoding='utf-8') as f:
