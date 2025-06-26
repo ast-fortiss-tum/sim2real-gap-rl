@@ -29,7 +29,8 @@ pip install -r requirements.txt
 smartgrid/
 ├── rest of code      
 ├── run_extract_DAE.sh                    # offline dataset + DAE training
-├── run_experiments_total.sh              # main experiment launcher
+├── run_experiments_total.sh              # complete experiment launcher
+├── run_New_experiments.sh                # experiment launcher for many seeds
 ├── extract_graphics/                     # result‑parsing & plotting scripts
 ├── runs/                                 # TensorBoard logs will appear here
 ```
@@ -50,22 +51,37 @@ This extracts the dataset and trains a DAE that later supplies robust latent sta
 
 ### 2. Run Sim2Real discrepancy experiments
 
+Run the following bash for many case scenarios including changing charging efficiency, soc efficiency, discharging efficiency a
 ```bash
 bash run_experiments_total.sh \
-     lp=1           \ # limit input power
-     noise=1        \ # additive Gaussian sensor noise
-     broken=0       \ # 1 → two‑house setup with faulty battery
-     break_src=0      # 1 → disable battery of second house
 ```
+or for the experiments explained in the main report run (same seed generator):
+```bash
+bash run_New_experiments.sh \
+```
+The flags inside the executable are the following:
 
-Flags can be combined freely to recreate the scenarios reported in the paper.
+| Flag / Parameter   | Meaning & Typical Values                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--lp`             | Apply *limited-power* constraint to control inputs  `0` = off  `1` = on                                                                                               |
+| `--noise`          | Additive Gaussian sensor noise (σ). Example script grid uses **0.2** (set 0 = no noise).                                                                              |
+| `--broken`         | Switch to **two-house** environment  `0` = single-house (default)  `1` = two-house                                                                                    |
+| `--break_src`      | Disable battery of house 2 (sets capacity to 0 kWh)  `0` = healthy  `1` = disabled                                                                                    |
+| `--lin_src`        | Source realism level: `1` = perfect linear real data (obs-only shift)  `2` = “damaged” env (obs + dyn shift)                                                          |
+| `--variety-name`   | Environment variety code:<br>• `s` – *single*-bus grid<br>• `c` – *coupled* multi-bus grid<br>• `d` – *damaged* grid (efficiency 0.5)<br>• `v` – *variable* load grid |
+| `--degree`         | Coupling degree between buses (e.g., **0.5**, **0.65**, **0.8**).                                                                                                     |
+| `--bias`           | Systematic measurement bias added to observations (e.g., **0.5**).                                                                                                    |
+| `--noise_cfrs`     | Extra noise injected into **counter-factual** rollouts (default 0.0).                                                                                                 |
+| `--use_denoiser`   | Route observations through the pretrained DAE  `0` = no  `1` = yes                                                                                                    |
+| `--train-steps`    | Gradient updates per episode (default 201).                                                                                                                           |
+| `--lr`             | Learning rate (Adam), default **8 × 10⁻⁴**.                                                                                                                           |
+| `--bs`             | Batch size, default **12**.                                                                                                                                           |
+| `--update`         | Target-network sync interval in steps (default 1).                                                                                                                    |
+| `--deltar`         | Reward scaling factor (default 1).                                                                                                                                    |
+| `--seed`           | Random seed for reproducibility (scripts sweep **10 – 100**).                                                                                                         |
+| `--save-model`     | Directory path for storing `.pt` checkpoints.                                                                                                                         |
+| `--save_file_name` | Prefix for TensorBoard run names and model files.                                                                                                                     |
 
-| Flag        | Meaning                                    |
-| ----------- | ------------------------------------------ |
-| `lp`        | Apply *limited power* constraint to inputs |
-| `noise`     | Inject sensor noise with preset σ          |
-| `broken`    | Switch to **two‑house** environment        |
-| `break_src` | Set battery of house 2 to 0 kWh capacity   |
 
 ---
 
