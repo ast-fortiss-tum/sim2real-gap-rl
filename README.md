@@ -1,6 +1,4 @@
-Below is the full Markdown you can copy-paste directly into `README.md`:
 
-```markdown
 # CycleGAN for Vehicle Sim-to-Real Visual Transfer  
 _A lightweight PyTorch implementation_
 
@@ -22,10 +20,7 @@ source venv_cycleGAN/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 2. (Optional) grab the demo dataset
-bash download_dataset.sh      # downloads Monet2Photo or sim2Car_complete
-
-# 3. Train
+# 2. Train
 python trainCyGAN.py \
         --data_root monet2photo \
         --epochs 100 \
@@ -106,11 +101,11 @@ Released under the **MIT License**. If you use this code in academic work, cite 
 }
 ```
 
-[^1]: Zhu, J.-Y. *et al.* “Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks.” ICCV 2017.
+[^1]: J.- Y. Zhu, T. Park, P. Isola, and A. A. Efros. “Unpaired Image-to-Image Translation Using Cycle-Consistent Adversarial Networks”. In: IEEE International Conference on Computer Vision (ICCV). 2017, pp. 2223–2232. doi: 10.1109/ICCV.2017.244.
 
 ---
 
 Enjoy bridging the reality gap! For questions or pull requests, open an issue or ping **@Cubos1998**.
 
 ```
-```
+
