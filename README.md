@@ -57,7 +57,7 @@ Vehicle_RL_extension/
 
    ```bash
    cd ~/catkin_ws/src
-   git clone <principal_repository_url_Lambertenghi> fortiss_rl_extension
+   git clone https://github.com/mirefv/ROS-small-scale-vehicle.git Vehicle_RL_extension
    cd ..
    catkin_make
    ```
@@ -102,9 +102,9 @@ Under the directory `training/`
 ### Evaluate & visualise results
 
 ```bash
-python3 evaluation/(selected_script).py
+python3 evaluation/<selected_script>.py
 python3 create_GIF.py 
-python3 visualization_results/(selected_script).py
+python3 visualization_results/<selected_script>.py
 ...
 ```
 
@@ -114,14 +114,9 @@ The scripts deposit tables, GIFs and summary graphics in `visualization_results/
 
 ## Citation
 
-> Cubides-Herrera, Cristian Sebastián. “Simulation-to-Reality Gap Mitigation in Reinforcement Learning: Analyzing Observational and Dynamical Shifts in Smart Grids and Self-Driving Systems”. Master’s Thesis, Robotics, Cognition and Intelligence. Technical University of Munich, 2025.
-> M. Flores Valdez. “Design and Implementation of a ROS -Based Mixed Reality Framework
-for Autonomous Small-Scale Vehicles: Bridging the Gap Between Simulation and Reality”.
-Bachelor’s Thesis, Informatics. Technical University of Munich, 2024.
-> S. C. Lambertenghi and A. Stocco. “Assessing Quality Metrics for Neural Reality Gap
-Input Mitigation in Autonomous Driving Testing”. In: 2024 IEEE Conference on Soft-
-ware Testing, Veriﬁcation and Validation (ICST). IEEE, 2024, pp. 173–182. doi: 10.1109/
-ICST60714.2024.00024.
+[1] Cubides-Herrera, Cristian Sebastián. “Simulation-to-Reality Gap Mitigation in Reinforcement Learning: Analyzing Observational and Dynamical Shifts in Smart Grids and Self-Driving Systems”. Master’s Thesis, Robotics, Cognition and Intelligence. Technical University of Munich, 2025.
+[2] M. Flores Valdez. “Design and Implementation of a ROS -Based Mixed Reality Framework for Autonomous Small-Scale Vehicles: Bridging the Gap Between Simulation and Reality”. Bachelor’s Thesis, Informatics. Technical University of Munich, 2024.
+[3] S. C. Lambertenghi and A. Stocco. “Assessing Quality Metrics for Neural Reality Gap Input Mitigation in Autonomous Driving Testing”. In: 2024 IEEE Conference on Software Testing, Veriﬁcation and Validation (ICST). IEEE, 2024, pp. 173–182. doi: 10.1109/ICST60714.2024.00024.
 
 ---
 
