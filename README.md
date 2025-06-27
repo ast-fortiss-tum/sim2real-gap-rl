@@ -115,7 +115,9 @@ The scripts deposit tables, GIFs and summary graphics in `visualization_results/
 ## Citation
 
 [1] Cubides-Herrera, Cristian Sebastián. “Simulation-to-Reality Gap Mitigation in Reinforcement Learning: Analyzing Observational and Dynamical Shifts in Smart Grids and Self-Driving Systems”. Master’s Thesis, Robotics, Cognition and Intelligence. Technical University of Munich, 2025.
+
 [2] M. Flores Valdez. “Design and Implementation of a ROS -Based Mixed Reality Framework for Autonomous Small-Scale Vehicles: Bridging the Gap Between Simulation and Reality”. Bachelor’s Thesis, Informatics. Technical University of Munich, 2024.
+
 [3] S. C. Lambertenghi and A. Stocco. “Assessing Quality Metrics for Neural Reality Gap Input Mitigation in Autonomous Driving Testing”. In: 2024 IEEE Conference on Software Testing, Veriﬁcation and Validation (ICST). IEEE, 2024, pp. 173–182. doi: 10.1109/ICST60714.2024.00024.
 
 ---
