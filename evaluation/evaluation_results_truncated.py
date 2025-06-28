@@ -9,9 +9,9 @@ import pandas as pd
 """
 Author: Cristian Cubides
 This script generates a performance table from runs using poses.json and moving.json files.
-It computes the cumulative turning until the computed cross-track error (CTE) exceeds a survival threshold,
-and for each of three safe thresholds, the percentage of turning during that period where CTE was safe.
-It also computes the mean speed and maximum CTE observed during the run.
+It computes cumulative turning until computed CTE exceeds the survival threshold, and for each
+safe threshold (three values), the percentage of turning within that period where CTE was safe.
+It also computes mean speed, maximum CTE, and an overall Score.
 Runs are grouped by the subfolder in which they reside.
 The poses JSON is expected to contain keys "pose", "time", and "lanes".
 The moving JSON is expected to contain keys "going" and "time".
@@ -67,12 +67,12 @@ def compute_computed_cte(x, y, centerline, half_widths):
 def analyze_run(poses_data, moving_data, survival_threshold, safe_thresholds):
     """
     Process a single run and compute:
-      - The cumulative turning angle (in degrees) accumulated while the agent is "going"
+      - SurvivedDeg: The cumulative turning angle (in degrees) accumulated while the agent is "going"
         until the computed CTE first exceeds the survival threshold.
       - For each safe threshold (three values), the percentage of turning during that period
         where the computed CTE was at or below that safe threshold.
-      - The mean speed computed from consecutive "going" poses.
-      - The maximum computed CTE observed during the run.
+      - MeanSpeed: The mean speed computed from consecutive "going" poses.
+      - MaxCTE: The maximum computed CTE observed during the run.
     
     The poses JSON is expected to contain keys "pose", "time", and "lanes".
     The moving JSON is expected to contain keys "going" and "time".
@@ -110,7 +110,6 @@ def analyze_run(poses_data, moving_data, survival_threshold, safe_thresholds):
     elif n_moving == 1:
         if going_raw[0]:
             intervals.append((moving_times[0], pose_times[-1]))
-        # Otherwise, always off.
     else:
         i = 0
         while i < n_moving:
@@ -170,7 +169,6 @@ def analyze_run(poses_data, moving_data, survival_threshold, safe_thresholds):
         x, y = poses[i]
         t = pose_times[i]
         curr_cte = compute_computed_cte(x, y, centerline, half_widths)
-        #print(curr_cte, "  ", i)  # Debug output.
         max_cte = max(max_cte, curr_cte)
 
         # Compute turning angle relative to road center.
@@ -221,21 +219,25 @@ def main():
         description="Generate a performance table from runs using poses.json and moving.json files. "
                     "Computes cumulative turning until computed CTE exceeds the survival threshold, and for each "
                     "safe threshold (three values), the percentage of turning within that period where CTE was safe. "
-                    "Also computes mean speed and maximum CTE. Runs are grouped by the subfolder in which they reside."
+                    "Also computes mean speed, maximum CTE, and an overall Score. "
+                    "Runs are grouped by the subfolder in which they reside."
     )
     parser.add_argument('--folder', type=str,
-                        default='./results_reality/',
+                        default='./results_reality',
                         help="Root folder containing dataset folders.")
     parser.add_argument('--dataset', type=str, default='dataset2',
                         help="The dataset folder to process (e.g., dataset3).")
     parser.add_argument('--survival_threshold', type=float, default=4.0,
                         help="The survival CTE threshold (a single float).")
     parser.add_argument('--safe_thresholds', type=str, default='1.5,2.0,3.0',
-                        help="Comma-separated list of three safe CTE thresholds. Persentage of survival inside this CTE thresholds")
+                        help="Comma-separated list of three safe CTE thresholds.")
+    parser.add_argument('--ideal_angle', type=float, default=360.0,
+                        help="Ideal turning angle for normalization (default 360).")
     args = parser.parse_args()
 
     survival_threshold = args.survival_threshold
     safe_thresholds = [float(val.strip()) for val in args.safe_thresholds.split(',') if val.strip()]
+    ideal_angle = args.ideal_angle
     dataset_folder = os.path.join(args.folder, args.dataset)
 
     # --- Recursively find all run files ending with '_poses.json' within the selected dataset folder ---
@@ -267,8 +269,24 @@ def main():
             surv_turn, safe_percents, mean_speed, max_cte = analyze_run(
                 poses_data, moving_data, survival_threshold, safe_thresholds
             )
-            row = {"Run": run_key, "MeanSpeed": mean_speed, "MaxCTE": max_cte, 
-                   "SurvivedDeg": surv_turn, "Group": files["group"]}
+            # Compute average safe percentage across safe thresholds.
+            avg_safe = sum(safe_percents[st] for st in safe_thresholds) / len(safe_thresholds)
+            # Truncate survival turning at 1080 degrees.
+            truncated_turn = min(surv_turn, 1080)
+            # Compute raw score as: (truncated_turn / ideal_angle) * (avg_safe / 100)
+            raw_score = (truncated_turn / ideal_angle) * (avg_safe / 100)
+            # Normalize the raw score so that the maximum possible value is 3.0.
+            # Then convert to a percentage where 3.0 corresponds to 100%.
+            score_perc = (raw_score / 3.0) * 100
+
+            row = {
+                "Run": run_key, 
+                "MeanSpeed": mean_speed, 
+                "MaxCTE": max_cte, 
+                "SurvivedDeg": surv_turn, 
+                "ScorePerc": score_perc,
+                "Group": files["group"]
+            }
             for st in safe_thresholds:
                 row[f"SafePerc_{st}"] = safe_percents[st]
             results.append(row)
@@ -282,19 +300,16 @@ def main():
     df = pd.DataFrame(results)
     df = df.sort_values("Run")
 
-    # --- Group results by the subfolder (Group) ---
+    # --- Group results by subfolder (Group) using only the mean (no std) ---
     agg_dict = {}
     for col in df.columns:
         if col in ["Run", "Group"]:
             continue
         if col == "MaxCTE":
-            agg_dict[col] = ['max', 'std']
+            agg_dict[col] = "max"
         else:
-            agg_dict[col] = ['mean', 'std']
+            agg_dict[col] = "mean"
     grouped_df = df.groupby("Group").agg(agg_dict).reset_index()
-    # Flatten the MultiIndex columns.
-    grouped_df.columns = ['_'.join(col).strip('_') if col[1] != '' else col[0]
-                            for col in grouped_df.columns.values]
 
     print("\nIndividual Performance Table:")
     print(df.to_string(index=False))

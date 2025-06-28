@@ -14,6 +14,7 @@ possible improvements:
 3. Use a learning rate scheduler to adjust the learning rate during training.
 4. Save model checkpoints at regular intervals.
 5. Implement a validation set to monitor overfitting.
+Disclaimer: Not implemented!!!!
 """
 
 # Define the custom dataset

@@ -3,6 +3,8 @@
 Soft Actor-Critic (SAC) Implementation for Line Following in DonkeyCar Environment
 Using a CycleGAN to transform observations before feeding them to the agent.
 
+REPLACE the exe_path with your own path to the simulator executable if needed!!
+
 Author: Cristian Cubides-Herrera
 Date: 2025-01-23
 Modified for performance optimization
@@ -129,7 +131,7 @@ class DonkeyCarConfig:
     ]
 
     env_config = {
-        "exe_path": "/home/students/Desktop/Cristian_MA/sdsim_2/sim_NT.x86_64", # Remplace if needed
+        "exe_path": "/home/students/Desktop/Cristian_MA/sdsim_2/sim_NT.x86_64", # Remplace if needed !!!!!
         "host": "127.0.0.1",
         "port": 9091,
         "start_delay": 5.0,

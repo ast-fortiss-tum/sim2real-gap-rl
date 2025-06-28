@@ -10,7 +10,6 @@ Key components:
 * CycleGAN visual transfer models for simulation ⇄ camera domains
 * Training scripts for the Unity simulator and fake‑camera domain adaptation
 * Evaluation utilities (statistics, GIF generation, result visualisation)
-
 ---
 
 ## Repository structure
@@ -20,15 +19,31 @@ Vehicle_RL_extension/
 ├── CycleGAN/
 │   ├── cyclegan_model_G_AB.pth   # simulation ➜ camera
 │   └── cyclegan_model_G_BA.pth   # camera ➜ simulation
-├── dataset_final/                # stored training logs & checkpoints
-├── evaluation/                   # extract tables of statistics
-├── visualization_results/        # scripts & assets for GIFs/plots
-├── create_GIF.py                 # helper – combines frames to GIF
-├── training_RL.py                # RL training (simulation input)
-├── training_RL_GAN.py            # RL training (fake‑camera input)
+├── results_reality/                # stored json of poses and going/stopping info
+│   ├── dataset1/              
+│   ├── dataset2/                
+│   ├── dataset3/               
+│   └── dataset_final/            
+├── evaluation/                       # extract tables of statistics, images and gifs
+│   ├── animation_w_speed.py                # Animates one run
+│   ├── animation.py                # Animates one run displaying speed and cte (if .json available)
+│   ├── complete_animation.py                # Animates one run with speed and cte complete (no need of _ctes.json)
+│   ├── evaluation_results_truncated.py                # Tabular results for surviving within defined CTES, std consideration and other stats. Truncate till CTE reaches another threshold
+│   ├── evaluation results.py                # Tabular results for surviving within defined CTES, std consideration and other stats.
+│   ├── gif_downsample.py               # Helper function to downsample already existing gifs.
+│   └── plot_all_circuits.py            # Give final stats after cleaning data and graphics (plot shown in report and presentation).
+├── training/
+│   ├── training_RL.py                # RL training (simulation input)
+│   └── training_RL_GAN.py            # RL training (fake‑camera input)
 ├── launch/
-│   └── test_launch.launch        # example ROS launch file
-└── src/                          # main ROS workspace (nodes)
+│   └── basic_launch.launch        # example ROS launch file
+├── saved_observations/           #some images saved to create the gif visuals
+├── gifs/           #Folder to save gifs
+├── figures/        #Folder to save figures
+├── policies/       #Folder to save policies
+│   ├── model_raw_final.zip          # policy for simulation input
+│   └── model_cycle_final.zip            # policy for fake‑camera input
+└── src/                           # main ROS workspace (nodes)
     └── nodes/
         ├── keyboard_node.py (demo)       # point‑following (real data)
         ├── model_RL_TC2.py       # trained in simulation – camera input
@@ -101,15 +116,13 @@ Under the directory `training/`
 
 ### Evaluate & visualise results
 
+The scripts deposit tables, GIFs and summary graphics in `evaluation/`.
+
 ```bash
-python3 evaluation/<selected_script>.py
-python3 create_GIF.py 
-python3 visualization_results/<selected_script>.py
-...
+
+python3 evaluation/<selected_script>.py --dataset <selected_dataset> --folder <selected_folder> --name <selected_run>
+
 ```
-
-The scripts deposit tables, GIFs and summary graphics in `visualization_results/`.
-
 ---
 
 ## Citation

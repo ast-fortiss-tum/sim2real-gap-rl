@@ -3,6 +3,8 @@
 Soft Actor-Critic (SAC) Implementation for Line Following in DonkeyCar Environment
 Using a CycleGAN to transform observations before feeding them to the agent.
 
+REPLACE THIS FILE WITH YOUR OWN DONKEYCAR ENVIRONMENT IF NEEDED!
+
 Author: Cristian Cubides-Herrera
 Date: 2025-01-23
 Modified for performance optimization
