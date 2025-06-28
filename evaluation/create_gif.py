@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+author: Cristian Cubides
 create_gif.py
 
 Script to create an animated GIF from a sequence of images in a directory.
