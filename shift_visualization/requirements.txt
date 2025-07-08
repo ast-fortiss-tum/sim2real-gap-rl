@@ -1,0 +1,18 @@
+# Core numerical / plotting
+numpy
+matplotlib
+scikit-learn
+seaborn
+tqdm
+
+# Image I/O & processing
+Pillow
+imageio
+scikit-image
+
+# Non-linear embedding
+umap-learn
+
+# Deep-feature embedding (optional: only needed for fig_umap_cnn.png)
+torch
+torchvision
