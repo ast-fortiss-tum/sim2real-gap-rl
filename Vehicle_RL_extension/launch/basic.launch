@@ -1,0 +1,20 @@
+<launch>
+    <node pkg="mixed_reality"
+          type="keyboard_node.py"
+          name="keyboard_node"
+          cwd = "node"
+          output="screen" />
+
+    <!-- Launch node b.py -->
+    <node pkg="mixed_reality"
+          type="control_node.py"
+          name="control_node"
+          output="screen" />
+
+    <!-- Launch node c.py -->
+    <node pkg="mixed_reality"
+          type="simulator_node.py"
+          name="simulator_node"
+          output="screen"
+          launch-prefix="bash -c 'sleep 5; $0 $@'" />
+</launch>

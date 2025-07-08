@@ -1,0 +1,2 @@
+bool reset
+Waypoint[] waypoints
